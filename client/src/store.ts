@@ -10,12 +10,16 @@ import {
   type ServerMessage,
   normalizeRoomCode,
 } from '@shared/protocol';
+import { LocalGame } from '@shared/local';
+import type { RoomSave } from '@shared/room';
 import { cancelFx, planEvents } from './fx';
 import { type Identity, getToken, loadIdentity, randomGuest, saveIdentity } from './identity';
 import { navigate } from './router';
+import { readStore, removeStore, writeStore } from './storage';
 import { playSfx, vibrate } from './sound';
 
-export type ConnStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'taken';
+/** 'unavailable': the multiplayer server could not be reached at all (never opened a connection this page load). */
+export type ConnStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'taken' | 'unavailable';
 
 export interface Rect {
   x: number;
@@ -124,20 +128,42 @@ export function toast(text: string): void {
 let ws: WebSocket | null = null;
 let attempt = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let openTimer: ReturnType<typeof setTimeout> | undefined;
 let wantConnect = false;
 let welcomed = false;
 let everWelcomed = false;
 const readyQueue: Array<() => void> = [];
 let reqCounter = 0;
 
+/** How long the very first connection may take before multiplayer is declared unavailable. */
+const FIRST_CONNECT_TIMEOUT_MS = 7000;
+const FRIENDS_ROOM_KEY = 'cj.friendsRoom';
+const LOCAL_SAVE_KEY = 'cj.local';
+const LOCAL_SAVE_MAX_AGE_MS = 12 * 3600 * 1000;
+
+/** Multiplayer endpoint: VITE_WS_URL (e.g. wss://game.example.com/ws) or same-origin /ws. */
+export function wsUrl(): string {
+  const configured = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+  if (configured) return configured;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}/ws`;
+}
+
+// A solo game runs in the browser (shared/local.ts) and never touches the network.
+let local: LocalGame | null = null;
+
 function sendRaw(msg: ClientMessage): boolean {
+  if (local) {
+    local.handle(msg);
+    return true;
+  }
   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   ws.send(JSON.stringify(msg));
   return true;
 }
 
 export function send(msg: ClientMessage): boolean {
-  if (!welcomed) return false;
+  if (!local && !welcomed) return false;
   return sendRaw(msg);
 }
 
@@ -153,16 +179,30 @@ export function connect(): void {
   clearTimeout(reconnectTimer);
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   patch({ conn: everWelcomed ? 'reconnecting' : 'connecting' });
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   let sock: WebSocket;
   try {
-    sock = new WebSocket(`${proto}://${location.host}/ws`);
+    sock = new WebSocket(wsUrl());
   } catch {
-    scheduleReconnect();
+    if (everWelcomed) scheduleReconnect();
+    else markUnavailable();
     return;
   }
   ws = sock;
+  let opened = false;
+  clearTimeout(openTimer);
+  if (!everWelcomed) {
+    openTimer = setTimeout(() => {
+      if (ws === sock && !opened) {
+        ws = null;
+        sock.onclose = null;
+        sock.close();
+        markUnavailable();
+      }
+    }, FIRST_CONNECT_TIMEOUT_MS);
+  }
   sock.onopen = () => {
+    opened = true;
+    clearTimeout(openTimer);
     if (ws === sock) sendHello();
   };
   sock.onmessage = (ev) => {
@@ -179,6 +219,11 @@ export function connect(): void {
     if (ws !== sock) return;
     ws = null;
     welcomed = false;
+    clearTimeout(openTimer);
+    if (!opened && !everWelcomed) {
+      markUnavailable();
+      return;
+    }
     if (ev.code === 4000) {
       wantConnect = false;
       patch({ conn: 'taken' });
@@ -189,6 +234,27 @@ export function connect(): void {
   sock.onerror = () => {
     /* close follows */
   };
+}
+
+/** Never reached the server: stop retrying and let the friends screens explain it. */
+function markUnavailable(): void {
+  wantConnect = false;
+  clearTimeout(reconnectTimer);
+  readyQueue.length = 0;
+  patch({ conn: 'unavailable', joining: false });
+}
+
+/** Called by the friends screens: open the socket if it is not open. */
+export function ensureMultiplayer(): void {
+  if (local || !state.identity || state.conn === 'unavailable') return;
+  connect();
+}
+
+/** "Retry" on the offline state. */
+export function retryMultiplayer(): void {
+  attempt = 0;
+  everWelcomed = false;
+  connect();
 }
 
 function scheduleReconnect(): void {
@@ -210,14 +276,31 @@ function whenReady(fn: () => void): void {
   if (welcomed) fn();
   else {
     readyQueue.push(fn);
-    connect();
+    if (state.conn === 'unavailable') retryMultiplayer();
+    else connect();
   }
+}
+
+/** Drop the socket (when a solo game starts) so nothing multiplayer is left running. */
+function disconnect(): void {
+  wantConnect = false;
+  clearTimeout(reconnectTimer);
+  clearTimeout(openTimer);
+  readyQueue.length = 0;
+  const sock = ws;
+  ws = null;
+  welcomed = false;
+  if (sock) {
+    sock.onclose = null;
+    sock.close();
+  }
+  patch({ conn: 'idle' });
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     patch({ online: true });
-    if (wantConnect && !ws) {
+    if (!local && wantConnect && !ws) {
       attempt = 0;
       connect();
     }
@@ -240,6 +323,8 @@ function clearGame(): void {
 }
 
 function leaveRoomLocally(): void {
+  removeStore(FRIENDS_ROOM_KEY);
+  clearLocal();
   clearGame();
   patch({ room: null, rematchRequested: false });
   navigate('/', { replace: true });
@@ -259,6 +344,7 @@ function handle(msg: ServerMessage): void {
         const norm = wantCode ? normalizeRoomCode(wantCode) : null;
         if (norm && msg.roomCode && norm !== msg.roomCode) toast(`You are still in room ${msg.roomCode}. Leave it to join another.`);
       } else {
+        removeStore(FRIENDS_ROOM_KEY);
         if (hadRoom) {
           leaveRoomLocally();
           toast('That game is no longer running');
@@ -272,6 +358,7 @@ function handle(msg: ServerMessage): void {
       const room = msg.room;
       const was = state.room;
       patch({ room, joining: false, joinError: null });
+      if (room.mode === 'friends') writeStore(FRIENDS_ROOM_KEY, room.code);
       if (room.phase === 'lobby' || room.phase === 'rematch') {
         clearGame();
         if (room.phase === 'lobby' || room.phase === 'rematch') patch({ rematchRequested: false });
@@ -382,17 +469,72 @@ export function setIdentity(id: Identity): void {
   saveIdentity(id);
   patch({ identity: id });
   if (welcomed) sendHello();
-  else connect();
+  else if (wantConnect || onMultiplayerRoute()) connect();
+}
+
+function onMultiplayerRoute(): boolean {
+  return /^\/(friends|r\/)/i.test(location.pathname);
+}
+
+// ------------------------------------------------------------------ solo (client-side)
+
+function newLocal(): LocalGame {
+  disconnect();
+  const id = ensureIdentity();
+  local?.close();
+  const game: LocalGame = new LocalGame({
+    profile: { name: id.name, avatar: id.avatar },
+    // Deliver like a network would: asynchronously, in order.
+    onMessage: (m) => {
+      setTimeout(() => {
+        if (local === game) handle(m);
+      }, 0);
+    },
+    onPersist: (save) => {
+      if (local !== game) return;
+      if (save) writeStore(LOCAL_SAVE_KEY, JSON.stringify({ at: Date.now(), save }));
+      else removeStore(LOCAL_SAVE_KEY);
+    },
+  });
+  local = game;
+  patch({ playerId: game.playerId, conn: 'idle' });
+  return game;
+}
+
+function clearLocal(): void {
+  removeStore(LOCAL_SAVE_KEY);
+  if (local) {
+    const g = local;
+    local = null;
+    g.close();
+  }
+}
+
+function startLocal(botCount: number): void {
+  newLocal().handle({ type: 'createRoom', mode: 'ai', botCount });
+}
+
+function loadLocalSave(): RoomSave | null {
+  const raw = readStore(LOCAL_SAVE_KEY);
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as { at?: number; save?: RoomSave };
+    const sv = o.save;
+    if (!sv || typeof o.at !== 'number' || Date.now() - o.at > LOCAL_SAVE_MAX_AGE_MS) throw new Error('stale');
+    if (sv.mode !== 'ai' || !Array.isArray(sv.seats) || sv.seats.length < 2 || (sv.phase !== 'playing' && sv.phase !== 'finished') || !sv.state) throw new Error('bad');
+    return sv;
+  } catch {
+    removeStore(LOCAL_SAVE_KEY);
+    return null;
+  }
 }
 
 export function playNow(): void {
-  ensureIdentity();
-  whenReady(() => send({ type: 'createRoom', mode: 'ai', botCount: 1 }));
+  startLocal(1);
 }
 
 export function playAI(botCount: number): void {
-  ensureIdentity();
-  whenReady(() => send({ type: 'createRoom', mode: 'ai', botCount }));
+  startLocal(Math.max(1, Math.min(3, botCount)));
 }
 
 export function createFriendsRoom(): void {
@@ -435,7 +577,14 @@ export function rematch(): void {
 }
 
 export function boot(): void {
-  if (state.identity) connect();
+  if (!state.identity) return;
+  const save = onMultiplayerRoute() ? null : loadLocalSave(); // an invite link wins over an old solo game
+  if (save) {
+    newLocal().restore(save);
+    return;
+  }
+  // Multiplayer only when a friends flow is on screen or a friends room is waiting to be resumed.
+  if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) connect();
 }
 
 export type { Avatar };

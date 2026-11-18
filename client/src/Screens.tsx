@@ -3,19 +3,19 @@ import { NAME_MAX_LENGTH, normalizeRoomCode, sanitizeName } from '@shared/protoc
 import { Avatar, BackButton, Logo } from './components';
 import { AVATAR_COLORS, AVATAR_EMOJIS, type Identity, randomGuest } from './identity';
 import { navigate } from './router';
-import { clearJoinError, createFriendsRoom, joinCode, playAI, playNow, setIdentity, useApp } from './store';
+import { clearJoinError, createFriendsRoom, ensureMultiplayer, joinCode, playAI, playNow, retryMultiplayer, setIdentity, useApp } from './store';
 import { unlockAudio } from './sound';
 
 // ------------------------------------------------------------------ landing
 
 export function Landing() {
-  const { identity, conn } = useApp();
+  const { identity } = useApp();
   const [busy, setBusy] = useState(false);
   const go = () => {
     unlockAudio();
     setBusy(true);
     playNow();
-    setTimeout(() => setBusy(false), 4000);
+    setTimeout(() => setBusy(false), 1500);
   };
   return (
     <div className="screen landing">
@@ -33,7 +33,7 @@ export function Landing() {
       </div>
       <nav className="landing-actions" aria-label="Main menu">
         <button className="btn primary huge" data-testid="play-now" onClick={go} disabled={busy}>
-          {busy ? (conn === 'open' ? 'Dealing...' : 'Connecting...') : 'Play Now'}
+          {busy ? 'Dealing...' : 'Play Now'}
           <small>vs 1 bot, instantly</small>
         </button>
         <div className="two-col">
@@ -123,6 +123,27 @@ export function GuestEntry({ mode, invite, onDone }: { mode: 'new' | 'edit'; inv
 
 // ------------------------------------------------------------------ friends
 
+/** Shown on every friends screen when the multiplayer server cannot be reached. Solo play is unaffected. */
+export function MultiplayerOffline({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="offline-panel" role="alert" data-testid="mp-offline">
+      <p className="offline-title tilt">Multiplayer is offline right now</p>
+      <p className="quiet">We couldn't reach the game server. Playing against bots still works anywhere, even without a connection.</p>
+      <div className="stack">
+        <button className="btn primary" data-testid="mp-retry" onClick={onRetry}>
+          Retry
+        </button>
+        <button className="btn secondary" data-testid="mp-play-ai" onClick={() => navigate('/ai')}>
+          Play vs AI instead
+        </button>
+        <button className="btn ghost" onClick={() => navigate('/')}>
+          Home
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const JOIN_MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "We couldn't find that room. It may have expired. Check the code or ask for a fresh link.",
   ROOM_FULL: 'That room is full (4 players).',
@@ -137,7 +158,10 @@ export function PlayFriends() {
   const { joinError, joining, conn } = useApp();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => () => clearJoinError(), []);
+  useEffect(() => {
+    ensureMultiplayer();
+    return () => clearJoinError();
+  }, []);
   const cleaned = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5);
   const valid = normalizeRoomCode(cleaned) !== null;
   const submit = (e: React.FormEvent) => {
@@ -152,6 +176,10 @@ export function PlayFriends() {
         <BackButton onClick={() => navigate('/')} label="Home" />
       </header>
       <h1 className="page-title tilt">Play Friends</h1>
+      {conn === 'unavailable' ? (
+        <MultiplayerOffline onRetry={retryMultiplayer} />
+      ) : (
+        <>
       <p className="lead">Start a private room and send the link, or jump into one with a code.</p>
       <button
         className="btn primary wide big"
@@ -206,6 +234,8 @@ export function PlayFriends() {
           {joinErrorText(joinError.code, joinError.message)}
         </p>
       )}
+        </>
+      )}
       <div className="spacer" />
     </div>
   );
@@ -216,7 +246,6 @@ export function PlayFriends() {
 export function PlayAI() {
   const [n, setN] = useState(2);
   const [busy, setBusy] = useState(false);
-  const { conn } = useApp();
   return (
     <div className="screen scroll-screen friends">
       <header className="topline">
@@ -240,10 +269,10 @@ export function PlayAI() {
           unlockAudio();
           setBusy(true);
           playAI(n);
-          setTimeout(() => setBusy(false), 3000);
+          setTimeout(() => setBusy(false), 1500);
         }}
       >
-        {busy && conn !== 'open' ? 'Connecting...' : 'Start game'}
+        Start game
       </button>
       <div className="spacer" />
     </div>
@@ -267,7 +296,9 @@ export function JoinFlow({ code: raw }: { code: string }) {
   return (
     <div className="screen join-flow">
       <Logo className="join-logo" />
-      {!code ? (
+      {conn === 'unavailable' ? (
+        <MultiplayerOffline onRetry={retry} />
+      ) : !code ? (
         <>
           <p className="error-text big">That invite link doesn't look right.</p>
           <button className="btn secondary" onClick={() => navigate('/friends')}>

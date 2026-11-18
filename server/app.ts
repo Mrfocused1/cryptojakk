@@ -25,6 +25,7 @@ export interface GameServer {
 
 export function createGameServer(opts: ServerOptions = {}): GameServer {
   const hub = new Hub(opts);
+  const allowedOrigins = ([] as Array<string | undefined>).concat(opts.publicOrigin).filter((o): o is string => !!o);
   const app = express();
   app.disable('x-powered-by');
   const started = Date.now();
@@ -58,7 +59,7 @@ export function createGameServer(opts: ServerOptions = {}): GameServer {
       return;
     }
     const origin = req.headers.origin;
-    if (opts.publicOrigin && origin && origin !== opts.publicOrigin) {
+    if (allowedOrigins.length > 0 && origin && !allowedOrigins.includes(origin)) {
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;

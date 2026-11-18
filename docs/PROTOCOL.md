@@ -9,6 +9,10 @@ In the Vite client: `import type { ClientMessage, ServerMessage } from '@shared/
 
 * One WebSocket per tab at `ws(s)://<host>/ws`. Text frames, one JSON object per frame (max 4096 bytes - bigger frames
   close the socket with code 1009).
+* The browser client only opens this socket for friends rooms (the endpoint is `VITE_WS_URL` or same-origin `/ws`). Solo bot games
+  are played in the browser by `shared/local.ts`, which speaks these same messages in-process (no socket). The server still supports
+  `createRoom` with `mode: "ai"`.
+* If `PUBLIC_ORIGIN` is set (comma-separated list allowed), upgrades from other browser `Origin`s get HTTP 403.
 * Per-socket rate limit (burst 30, 15 msg/s sustained). Excess messages get `RATE_LIMITED`; persistent abuse closes the socket (1008).
 * The server sends WebSocket-level pings every 30 s; browsers answer automatically. A socket that does not answer is dropped.
   `{type:"ping"}` / `{type:"pong"}` also exist for latency display and keep-alive.

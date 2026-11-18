@@ -14,6 +14,7 @@ npm install
 npm run dev        # server (tsx watch, :3001) + Vite (:5173); open http://localhost:5173
 npm test           # vitest
 npm run typecheck  # tsc --noEmit
+npm run build:client  # vite build only -> dist/client (this is what Vercel runs)
 npm run build      # vite build -> dist/client, esbuild -> dist/server.js
 npm start          # node dist/server.js  (serves client + /ws + /healthz on $PORT, default 3000)
 ```
@@ -25,7 +26,8 @@ Node 22+ and npm. In dev, Vite proxies `/ws` (websocket) and `/healthz` to the s
 | var | default | meaning |
 |---|---|---|
 | `PORT` | `3000` | HTTP + WebSocket port (dev script sets 3001 for the server) |
-| `PUBLIC_ORIGIN` | unset | e.g. `https://jakk.example.com`. If set, WebSocket upgrades from browsers with a different `Origin` are refused. |
+| `PUBLIC_ORIGIN` | unset | e.g. `https://jakk.example.com`. If set, WebSocket upgrades from browsers with a different `Origin` are refused. Comma-separated list allowed (`https://jakk.vercel.app,https://jakk.example.com`) so a client hosted elsewhere can connect. |
+| `VITE_WS_URL` | unset | **Client build-time** variable, e.g. `wss://game.example.com/ws`. Where the browser opens the multiplayer socket. Unset = same-origin `/ws`. |
 
 Node does not read `.env` automatically: `node --env-file=.env dist/server.js`, or set the variables in your host.
 
@@ -36,6 +38,9 @@ shared/engine/   pure deterministic rules engine (no Node/DOM imports; rng injec
   cards.ts rules.ts(RulesConfig) types.ts play.ts(legality) engine.ts(createGame/applyAction) view.ts(PlayerView, redaction, client helpers)
 shared/protocol.ts   every client<->server message, room/lobby types, error codes, name/room-code helpers
 shared/ai.ts         bot chooser; takes ONLY a PlayerView
+shared/room.ts       Room: lobby, game flow, bots, timers (Node-free; used by the server hub AND by the browser for solo games)
+shared/local.ts      LocalGame: in-browser stand-in for the server (same messages in/out), used for Play Now / Play AI
+shared/rng.ts, timing.ts   crypto.getRandomValues shuffle rng, bot/room timings
 server/              app.ts (express + ws upgrade) hub.ts (connections, rate limit, routing) room.ts (lobby, game, bots, timers)
                      validate.ts (input validation) rng.ts (crypto.randomInt) config.ts (timings) main.ts (entry)
 client/              Vite + React + TS app (root of the Vite build), see "Client" below
@@ -69,8 +74,8 @@ highlighting uses the shared engine helpers (`getLegalCardIds`, `getAddableCardI
 
 ```
 client/index.html, main.tsx   entry, meta/OG tags, manifest link
-client/public/                logo-black/white.png (from logo-source.jpg via ImageMagick), icons, manifest.webmanifest, og.png
-client/src/store.ts           the single connection + state module (WebSocket, reconnect/backoff, resume, actions, toasts)
+client/public/                logo-black/white.png (made from design/logo-source.jpg via ImageMagick), icons, manifest.webmanifest, og.png
+client/src/store.ts           the single state module: solo games (LocalGame) or the lazy WebSocket (reconnect/backoff, resume), actions, toasts
 client/src/fx.ts              turns `events` into an ordered presentation queue (feed line, callouts, flights, sfx)
 client/src/router.ts          ~50-line History-API router (/, /friends, /ai, /how-to-play, /profile, /r/CODE, /play)
 client/src/Table.tsx          game table: seats, piles, hand, action bar, suit picker, menu
@@ -81,7 +86,15 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
   then from the URL, so reloads and rematches never pass through the home screen. `/r/CODE` opens the join flow directly.
 * **Identity**: display name + avatar + a random secret session token live in `localStorage` (`cj.identity`, `cj.token`). "Play Now"
   uses the saved identity or generates a "Guest 1234" one. Sound mute is `cj.muted`.
-* **Connection**: auto-reconnect with 0.5 s .. 5 s backoff, `hello` with the stored token, state replaced from `roomState`/`state`;
+* **Solo games run in the browser.** "Play Now" and "Play AI" create a `LocalGame` (`shared/local.ts`) that accepts the same client
+  messages and emits the same `roomState` / `state` (redacted view + events) / `error` messages as the server, driving the same `Room`,
+  engine and bot AI (bot pacing 900-1600 ms, >= 3000 ms when you owe a JAKK call, ~90% bot JAKK rate; shuffle uses
+  `crypto.getRandomValues`). No WebSocket is opened, so solo works offline and on static hosting. The in-progress game is saved in
+  `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it.
+* **Multiplayer connects lazily.** The socket opens only for Play Friends, a `/r/CODE` link, or a stored friends-room session
+  (`cj.friendsRoom`). If the very first connection fails or takes > 7 s, the friends screens show "Multiplayer is offline right now"
+  with Retry and "Play vs AI instead" instead of a reconnect loop. Endpoint: `VITE_WS_URL` or same-origin `/ws`.
+* **Connection** (friends): auto-reconnect with 0.5 s .. 5 s backoff, `hello` with the stored token, state replaced from `roomState`/`state`;
   banner for connecting / reconnecting / offline / "opened in another tab" (close code 4000, with a "Use here" button).
 * **Animation**: CSS + Web Animations API only. Played/drawn cards fly between hand/seats and piles (< 350 ms each, queued in event
   order, skipped for `resync` states); `prefers-reduced-motion` removes motion and keeps fades.
@@ -89,7 +102,22 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
 * **Link previews**: `og:image` / `twitter:image` in `client/index.html` are root-relative (`/og.png`). WhatsApp and most crawlers need an
   absolute URL, so replace them with `https://your-domain/og.png` when you deploy.
 
-## Deployment
+## Deploying
+
+**(a) Vercel (client only, solo works out of the box).** `vercel.json` builds with `npm run build:client`, serves `dist/client`, rewrites
+non-file routes to `index.html` (so `/r/CODE` works) and caches `/assets/*` forever. Import the repo, no settings needed. Play Now and
+Play AI run entirely in the browser; Play Friends shows "Multiplayer is offline right now" until a server is configured.
+
+**(b) Add multiplayer.** Vercel cannot hold WebSockets, so run the Node server on a host that keeps a process alive (Render, Railway or
+Fly.io, for example). Run exactly **one instance** (rooms live in memory): `npm ci && npm run build && npm start` (it reads `$PORT`).
+Then set `VITE_WS_URL=wss://<your-server-host>/ws` in the Vercel project's environment variables and redeploy the client (it is read at
+build time), and set `PUBLIC_ORIGIN=https://<your-vercel-domain>` on the server (comma-separate several origins, e.g. a custom domain
+and the `*.vercel.app` one).
+
+**(c) One host for everything.** Skip Vercel: the same Node server also serves the built client, `/ws` and `/healthz`, so
+`npm ci && npm run build && npm start` on a single host is a complete deployment (leave `VITE_WS_URL` unset).
+
+### Single Node process details
 
 A single Node process serves everything: `npm ci && npm run build && PORT=8080 npm start`. Put it behind any TLS-terminating
 proxy that forwards WebSocket upgrades on `/ws` (set `PUBLIC_ORIGIN`). `/healthz` returns `{ok, uptimeSec, rooms, connections}`.
