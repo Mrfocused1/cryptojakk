@@ -1,36 +1,14 @@
-export interface Timing {
-  botMinMs: number;
-  botMaxMs: number;
-  /** Minimum bot delay while a HUMAN owes a JAKK call. */
-  jakkBotMinMs: number;
-  /** A disconnected player's turn is played by the bot logic after this long. */
-  awayTurnMs: number;
-  /** Room with no connected human for this long is deleted. */
-  emptyRoomTtlMs: number;
-  /** Room with no activity for this long is deleted. */
-  idleRoomTtlMs: number;
-  sweepIntervalMs: number;
-  heartbeatIntervalMs: number;
-}
+import type { Timing } from '../shared/timing';
 
-export const DEFAULT_TIMING: Timing = {
-  botMinMs: 900,
-  botMaxMs: 1600,
-  jakkBotMinMs: 3000,
-  awayTurnMs: 15_000,
-  emptyRoomTtlMs: 5 * 60_000,
-  idleRoomTtlMs: 30 * 60_000,
-  sweepIntervalMs: 30_000,
-  heartbeatIntervalMs: 30_000,
-};
+export { DEFAULT_TIMING, type Timing } from '../shared/timing';
 
 export interface ServerOptions {
   port?: number;
   host?: string;
   /** Directory with the built client (index.html). Auto-detected when omitted. */
   clientDir?: string;
-  /** If set, WebSocket upgrades from a different browser Origin are refused. */
-  publicOrigin?: string;
+  /** If set, WebSocket upgrades from a browser Origin not in this list are refused. One origin or several. */
+  publicOrigin?: string | string[];
   maxRooms?: number;
   timing?: Partial<Timing>;
   /** Per-socket rate limit: burst size and refill per second. */
