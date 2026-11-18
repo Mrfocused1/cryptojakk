@@ -1596,3 +1596,27 @@ button.hdr-logo {
   display: inline-block;
   line-height: 1;
 }
+
+/* printed faces (number cards and aces from the Affinity deck): the image is the whole card, so the drawn
+   index, pips and stock are hidden; power tags still sit on top */
+.card.printed {
+  background: none;
+  border-radius: calc(var(--w) * 0.075);
+}
+.card.printed .print {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.card.printed > :is(.corner, .pip, .pips) {
+  display: none !important;
+}
+.card.printed .tag {
+  z-index: 2;
+}
+.gt-screen .card.printed {
+  border-radius: calc(var(--w) * 0.075);
+}

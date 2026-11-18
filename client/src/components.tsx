@@ -3,7 +3,6 @@ import { type Card, type RulesConfig, type Suit, DEFAULT_RULES, SUIT_NAME, isBla
 import type { Avatar as AvatarT } from '@shared/protocol';
 import { takeOver, useApp } from './store';
 import { navigate } from './router';
-import { CourtArt } from './CourtArt';
 import { AVATAR_ICON_ART, markColour } from './avatarIcons';
 import { SUIT_PATH } from './suitPaths';
 import { isMuted, setMuted, subscribeMuted } from './sound';
@@ -57,8 +56,9 @@ const PIP_LAYOUT: Record<string, Array<[number, number]>> = {
 export function CardFace({ card, rules, className = '', style }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties }) {
   const tag = powerTag(card, rules);
   const court = card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' ? card.rank : null;
-  // The king of spades uses the photographed panel; the other court cards are drawn.
-  const kingArt = card.rank === 'K' && card.suit === 'S';
+  // Every face is a printed card image: number cards and aces from the Affinity deck, courts from the
+  // traditional English pattern, all on the same textured stock (see design/ and public/cards/).
+  const printed = true;
   const index = (
     <>
       <b>{card.rank}</b>
@@ -66,8 +66,8 @@ export function CardFace({ card, rules, className = '', style }: { card: Card; r
     </>
   );
   return (
-    <div className={`card face ${PIP_LAYOUT[card.rank] ? 'num' : ''} ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${card.rank === 'A' ? 'ace' : ''} ${className}`} style={style}>
-      {court && (kingArt ? <img className="art" src="/art/king-spades-art.webp" alt="" draggable={false} /> : <CourtArt rank={court} suit={card.suit} />)}
+    <div className={`card face ${printed ? 'printed' : ''} ${PIP_LAYOUT[card.rank] ? 'num' : ''} ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${card.rank === 'A' ? 'ace' : ''} ${className}`} style={style}>
+      {printed && <img className="print" src={`/cards/${card.rank}${card.suit}.webp`} alt="" draggable={false} />}
       <span className="corner">{index}</span>
       <span className="corner br" aria-hidden="true">
         {index}
