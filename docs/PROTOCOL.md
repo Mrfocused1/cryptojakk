@@ -113,7 +113,7 @@ Sent on every lobby change (join/leave/ready/bot/host/connection flag/phase). Al
 {"type":"roomState","room":{"code":"K7M2Q","mode":"friends","phase":"lobby","hostId":"p_9-ZWi8_YFGiX",
  "players":[{"playerId":"p_9-ZWi8_YFGiX","name":"Alice","avatar":{"emoji":"🦊","color":"#ff8800"},"isHost":true,"isBot":false,"ready":false,"connected":true},
             {"playerId":"bot_1k2m3n1","name":"Ada","avatar":{"emoji":"🤖","color":"#f59e0b"},"isHost":false,"isBot":true,"ready":true,"connected":true}],
- "minPlayers":2,"maxPlayers":4,"canStart":true,"rules":{"minPlayers":2,"maxPlayers":4,"handSize":7,"multiPlay":true,"drawCount":1,"playAfterDraw":false,"powerRanks":["2","7","8","J","A"],"canFinishOnPower":true,"twoPenalty":2,"stackTwos":true,"blackJackPenalty":5,"stackBlackJacks":true,"redJackCancels":true,"eightReverses":true,"sevenSkips":true,"aceWild":true,"jakkEnabled":true,"jakkMissPenalty":2}}}
+ "minPlayers":2,"maxPlayers":4,"canStart":true,"rules":{"minPlayers":2,"maxPlayers":4,"handSize":7,"multiPlay":true,"drawCount":1,"playAfterDraw":false,"powerRanks":["2","8","J","Q","K","A"],"canFinishOnPower":true,"twoPenalty":2,"stackTwos":true,"blackJackPenalty":5,"stackBlackJacks":true,"redJackCancels":true,"skipRank":"8","reverseRank":"K","queenAcceptsAny":true,"aceWild":true,"jakkEnabled":true,"jakkMissPenalty":2}}}
 ```
 Phases: `lobby` (waiting, first game) -> `playing` -> `finished` -> (`friends`) `rematch` (lobby again, same code, ready flags reset
 except the requester) -> `playing` ... In `ai` mode `finished` -> `playing` directly on `rematch`.
@@ -137,7 +137,7 @@ After every applied action, to every connected human, each with *their own* view
 * `version` increases by exactly 1 per applied action (including a late `declareJakk`). It is unique per game; a rematch restarts at 0.
 
 ### Events (`GameEvent`)
-`playerId` is the actor/subject. Exceptions: `skipped` (`playerId` = player who played the 7, `who` = skipped player),
+`playerId` is the actor/subject. Exceptions: `skipped` (`playerId` = player who played the 8, `who` = skipped player),
 `turn` (`playerId` = whose turn it is now), `jakkMissed` (`playerId` = the forgetful player).
 
 ```json
@@ -157,7 +157,7 @@ After every applied action, to every connected human, each with *their own* view
 {"type":"won","playerId":"p_a"}
 ```
 Typical ordering inside one `events` array: `jakkMissed`, `drew` (miss penalty) first if a JAKK was missed; then
-`penaltyTaken`/`drew`, or `played` (+ `suitChosen`, `penaltyAdded`/`penaltyCancelled`, `reversed`, `skipped`, `jakkDeclared`), then `turn` (or `won`).
+`penaltyTaken`/`drew`, or `played` (+ `suitChosen`, `penaltyAdded`/`penaltyCancelled`, `reversed` (King), `skipped` (8), `jakkDeclared`), then `turn` (or `won`).
 `reshuffled` precedes the `drew` it enabled. A winning play has no `turn` event.
 
 ### `error`
@@ -233,12 +233,13 @@ Engine rejections (`RejectionCode`, returned as `error.code` for `action`):
 3. **Card order in `cardIds` matters**: the first must be legal alone, the last ends on top. Build the array in tap order
    (use `getAddableCardIds(view, selection)`).
 4. **Aces need `suit`** whenever any selected card is an Ace (`needsSuitChoice(view, selection)`); several Aces = one `suit`.
+   (With a Queen on top and no penalty, `getLegalCardIds` returns the whole hand: `activeSuit` is then only the Queen's suit and does not restrict the next play.)
 5. **JAKK window**: after your play leaves you with 1 card, `view.jakkOwed === view.you` until you send `{type:"declareJakk"}`
    (or you passed `declareJakk:true` in the play). It is a separate action with the **current** version, allowed when it is not
    your turn. The moment *anybody's* next action is applied you draw 2. Declaring needlessly gives `JAKK_NOT_NEEDED` (ignore it).
    The version bumps on a successful declare, so `view.version` changes with no turn change.
-6. **Same player can move twice**: in 2-player games an 8 or 7 leaves `view.turn` unchanged. Don't assume `turn` alternates.
-7. **Direction** (`view.direction`, `1` = in `players` order) matters for drawing the table; 2-player games reverse too (cosmetic).
+6. **Same player can move twice**: in 2-player games an 8 (skip) or a King (reverse) leaves `view.turn` unchanged. Don't assume `turn` alternates.
+7. **Direction** (`view.direction`, `1` = in `players` order) matters for drawing the table; in 2-player games a King flips it too (cosmetic).
 8. **Penalty turn**: when `view.penalty` is set and it is your turn, the only valid actions are answering cards or `takePenalty`
    (`draw` is rejected). `getLegalCardIds` already returns just the answering cards.
 9. **Bots are `isBot:true` seats** and mid-game leavers become bots with their old `playerId`/name. Disconnected humans keep

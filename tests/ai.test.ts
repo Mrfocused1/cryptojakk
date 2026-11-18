@@ -40,6 +40,26 @@ describe('bot chooser', () => {
     expect(chooseBotAction(view(s, 'A'), { declareJakk: true })).toMatchObject({ cardIds: ['2H'] });
   });
 
+  it('treats 8 (skip) and King (reverse) as attack cards against a nearly-out opponent, and a 7 as ordinary', () => {
+    for (const power of ['8H', 'KH']) {
+      const s = scenario({ hands: { A: [power, '7H', '9H', '4H', '6C'], B: ['4D', '5D'], C: ['4S', '5S', '6S'] }, top: '5H', turn: 'A' });
+      expect(chooseBotAction(view(s, 'A'), { declareJakk: true })).toMatchObject({ cardIds: [power] });
+    }
+    // a 7 gets no attack bonus: with nothing else to separate them the ordinary-card ordering decides, never the 7 by default
+    const s = scenario({ hands: { A: ['7H', '9H', '9S', '4H', '6C'], B: ['4D', '5D'], C: ['4S', '5S', '6S'] }, top: '5H', turn: 'A' });
+    expect((chooseBotAction(view(s, 'A'), { declareJakk: true }) as any).cardIds.sort()).toEqual(['9H', '9S']);
+  });
+
+  it('does not gift a Queen to a nearly-out next opponent, but plays one freely otherwise; anything is playable on a Queen', () => {
+    const hand = ['QH', 'QS', '9H', '4H', '6C'];
+    const threatened = scenario({ hands: { A: hand, B: ['4D', '5D'], C: ['4S', '5S', '6S'] }, top: '5H', turn: 'A' });
+    expect((chooseBotAction(view(threatened, 'A'), { declareJakk: true }) as any).cardIds).not.toContain('QH');
+    const calm = scenario({ hands: { A: hand, B: ['4D', '5D', '6D'], C: ['4S', '5S', '6S'] }, top: '5H', turn: 'A' });
+    expect((chooseBotAction(view(calm, 'A'), { declareJakk: true }) as any).cardIds.sort()).toEqual(['QH', 'QS']);
+    const onQueen = scenario({ hands: { A: ['9S', '3C', '6D'], B: ['4D', '5D', '6S'] }, top: 'QH', turn: 'A' });
+    expect(chooseBotAction(view(onQueen, 'A'), { declareJakk: true })).toMatchObject({ type: 'play' });
+  });
+
   it('declares JAKK in the action only when told to and left with one card', () => {
     const s = scenario({ hands: { A: ['9H', '4H'], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
     expect(chooseBotAction(view(s, 'A'), { declareJakk: true })).toMatchObject({ declareJakk: true });

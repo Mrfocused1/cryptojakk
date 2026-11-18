@@ -27,6 +27,7 @@ interface Step {
   flights: Flight[];
   sfx?: Sfx;
   landTop?: Card;
+  landSuit?: Suit;
   dur: number;
 }
 
@@ -81,6 +82,7 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
         const actor = e.playerId;
         const bits: string[] = [];
         let callout: Step['callout'];
+        let landSuit: Suit = e.cards[e.cards.length - 1].suit;
         const setCallout = (c: Step['callout']) => {
           if (!callout || callout.kind !== 'danger') callout = c;
         };
@@ -95,6 +97,7 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
             if (!bits.includes(msg)) bits.push(msg);
             setCallout({ text: 'SKIP', kind: 'info' });
           } else if (n.type === 'suitChosen') {
+            landSuit = n.suit;
             bits.push(`suit is now ${SUIT_SYMBOL[n.suit]}`);
             setCallout({ text: SUIT_SYMBOL[n.suit], kind: isRedSuit(n.suit) ? 'red' : 'black' });
           } else if (n.type === 'penaltyAdded') {
@@ -112,6 +115,10 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
           } else break;
         }
         i = j - 1;
+        if (e.cards[e.cards.length - 1].rank === 'Q' && view.rules.queenAcceptsAny) {
+          bits.push('play anything');
+          setCallout({ text: 'ANY CARD', kind: 'info' });
+        }
         const flights: Flight[] = [];
         const to = discardRect;
         const seat = actor === me ? null : rectOf(`[data-anchor="seat-${actor}"]`);
@@ -127,6 +134,7 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
           flights,
           sfx: 'flick',
           landTop: e.cards[e.cards.length - 1],
+          landSuit,
           dur: STEP + Math.max(0, e.cards.length - 1) * 90,
         });
         break;
@@ -184,7 +192,7 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
   return () => {
     cancelFx();
     const hasPlay = steps.some((s) => s.landTop);
-    if (hasPlay && prev && !reduced) patch({ topOverride: prev.topDiscard });
+    if (hasPlay && prev && !reduced) patch({ topOverride: prev.topDiscard, suitOverride: prev.activeSuit });
     if (Object.keys(freshDelay).length) {
       patch({ freshDelay });
       later(2200, () => patch({ freshDelay: {} }));
@@ -206,11 +214,12 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
         }
         if (s.landTop && !reduced) {
           const card = s.landTop;
-          later(FLIGHT, () => patch({ topOverride: card }));
+          const suit = s.landSuit ?? card.suit;
+          later(FLIGHT, () => patch({ topOverride: card, suitOverride: suit }));
         }
       });
       t += s.dur;
-      if (idx === steps.length - 1) later(t - 30, () => patch({ topOverride: null }));
+      if (idx === steps.length - 1) later(t - 30, () => patch({ topOverride: null, suitOverride: null }));
     });
   };
 }

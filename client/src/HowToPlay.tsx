@@ -54,11 +54,14 @@ export function HowToPlayContent() {
           <Row cards={['JH', 'JD']} title="Red Jack: block">
             Played on a Jack penalty it cancels the whole thing. Otherwise it is an ordinary card.
           </Row>
-          <Row cards={['8D']} title="8: reverse">
-            Play passes the other way round the table. With two players you simply go again.
+          <Row cards={['8D']} title="8: skip">
+            The next player misses their turn. Play several 8s together to skip that many players. With two players you go again.
           </Row>
-          <Row cards={['7C']} title="7: skip">
-            The next player misses their turn. With two players you go again.
+          <Row cards={['KS']} title="King: reverse">
+            Play passes the other way round the table. With two players you simply go again. Two Kings played together cancel each other out.
+          </Row>
+          <Row cards={['QD', 'QC']} title="Queen: anything goes">
+            Whatever the suit or rank, any card can be played on a Queen (unless a penalty is waiting). The Queen itself follows the normal rule.
           </Row>
           <Row cards={['AS']} title="Ace: wild">
             Play it on anything (except a penalty) and name the suit that must be played next.

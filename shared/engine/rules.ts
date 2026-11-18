@@ -30,10 +30,12 @@ export interface RulesConfig {
   /** A red Jack on an active Jack penalty cancels it. */
   redJackCancels: boolean;
 
-  /** 8 reverses direction (with 2 players: the player goes again). */
-  eightReverses: boolean;
-  /** 7 skips the next player (with 2 players: the player goes again). */
-  sevenSkips: boolean;
+  /** Rank that skips the next player, one player per card played (with 2 players: the player goes again). null = no skip card. */
+  skipRank: Rank | null;
+  /** Rank that reverses direction (with 2 players: the player goes again). null = no reverse card. */
+  reverseRank: Rank | null;
+  /** A Queen on top of the discard (no penalty pending) accepts ANY card as the next play. */
+  queenAcceptsAny: boolean;
   /** Ace is wild when no penalty is pending; player nominates the suit. */
   aceWild: boolean;
 
@@ -49,15 +51,16 @@ export const DEFAULT_RULES: RulesConfig = {
   multiPlay: true,
   drawCount: 1,
   playAfterDraw: false,
-  powerRanks: ['2', '7', '8', 'J', 'A'],
+  powerRanks: ['2', '8', 'J', 'Q', 'K', 'A'],
   canFinishOnPower: true,
   twoPenalty: 2,
   stackTwos: true,
   blackJackPenalty: 5,
   stackBlackJacks: true,
   redJackCancels: true,
-  eightReverses: true,
-  sevenSkips: true,
+  skipRank: '8',
+  reverseRank: 'K',
+  queenAcceptsAny: true,
   aceWild: true,
   jakkEnabled: true,
   jakkMissPenalty: 2,

@@ -64,6 +64,8 @@ export interface AppState {
   feed: { id: number; text: string } | null;
   callout: Callout | null;
   topOverride: Card | null;
+  /** Active suit matching `topOverride` while a play is still animating (the view already holds the final suit). */
+  suitOverride: Suit | null;
   freshDelay: Record<string, number>;
   flights: Flight[];
   dealKey: number;
@@ -84,6 +86,7 @@ let state: AppState = {
   feed: null,
   callout: null,
   topOverride: null,
+  suitOverride: null,
   freshDelay: {},
   flights: [],
   dealKey: 0,
@@ -319,7 +322,7 @@ if (typeof window !== 'undefined') {
 
 function clearGame(): void {
   cancelFx();
-  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, freshDelay: {}, dealing: false });
+  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, suitOverride: null, freshDelay: {}, dealing: false });
 }
 
 function leaveRoomLocally(): void {
@@ -382,7 +385,7 @@ function handle(msg: ServerMessage): void {
         start();
       } else {
         cancelFx();
-        patch({ topOverride: null, feed: null });
+        patch({ topOverride: null, suitOverride: null, feed: null });
       }
       noteTurn(prev, msg.view, msg.resync);
       return;
@@ -580,8 +583,13 @@ export function boot(): void {
   if (!state.identity) return;
   const save = onMultiplayerRoute() ? null : loadLocalSave(); // an invite link wins over an old solo game
   if (save) {
-    newLocal().restore(save);
-    return;
+    try {
+      newLocal().restore(save);
+      return;
+    } catch {
+      // A save that cannot be rebuilt (corrupt, or from an incompatible version): drop it and start clean.
+      clearLocal();
+    }
   }
   // Multiplayer only when a friends flow is on screen or a friends room is waiting to be resumed.
   if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) connect();

@@ -1,6 +1,7 @@
 // Every "Example N" here is mirrored in docs/RULEBOOK.md (same numbers).
 import { describe, expect, it } from 'vitest';
-import { cardFromId, createGame, withRules, DEFAULT_RULES } from '../shared/engine';
+import { buildDeck, cardFromId, createGame, shuffle, withRules, DEFAULT_RULES } from '../shared/engine';
+import { getLegalCardIds, toPlayerView } from '../shared/engine';
 import { act, assertConserved, eventTypes, handIds, ok, play, scenario, seededRng, topId, turnId } from './helpers';
 
 // Filler cards that are inert and legal-neutral (3s, 4s, 5s, 6s, 9s...). Keep hands >= 3 cards so nobody wins/owes JAKK by accident.
@@ -148,77 +149,200 @@ describe('Jacks', () => {
   });
 });
 
-describe('Eights and Sevens', () => {
-  const four = (top = '5H') =>
+describe('Eights (skip), Kings (reverse) and Sevens (ordinary)', () => {
+  const three = (hand: string[]) =>
+    scenario({ hands: { A: hand, B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] }, top: '5H', turn: 'A' });
+  const four = (hand: string[]) =>
     scenario({
-      hands: { A: ['8H', '8S', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'], D: ['4H', '5C', '7S'] },
-      top,
+      hands: { A: hand, B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'], D: ['4H', '5C', '9S'] },
+      top: '5H',
       turn: 'A',
     });
+  const two = (hand: string[]) => scenario({ hands: { A: hand, B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
+  const skippedWho = (events: ReturnType<typeof play> extends infer R ? (R extends { events: infer E } ? E : never) : never) =>
+    (events as Array<{ type: string; who?: string }>).filter((e) => e.type === 'skipped').map((e) => e.who);
 
-  it('Example 16: an 8 reverses direction (3 players)', () => {
-    const s = scenario({ hands: { A: ['8H', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] }, top: '5H', turn: 'A' });
-    const r = ok(play(s, 'A', ['8H']));
-    expect(r.state.direction).toBe(-1);
+  it('Example 16: an 8 skips the next player (3 players); direction is unchanged', () => {
+    const r = ok(play(three(['8H', ...FILL]), 'A', ['8H']));
     expect(turnId(r.state)).toBe('C');
-    expect(r.events).toContainEqual({ type: 'reversed', playerId: 'A', direction: -1 });
+    expect(r.state.direction).toBe(1);
+    expect(r.events).toContainEqual({ type: 'skipped', playerId: 'A', who: 'B' });
+    expect(eventTypes(r.events)).toEqual(['played', 'skipped', 'turn']);
   });
 
-  it('Example 17: an 8 reverses direction (4 players); play then continues the other way', () => {
-    const r = ok(play(four(), 'A', ['8H']));
-    expect(r.state.direction).toBe(-1);
-    expect(turnId(r.state)).toBe('D');
-    const r2 = ok(play(r.state, 'D', ['4H']));
-    expect(turnId(r2.state)).toBe('C');
+  it('Example 17: an 8 skips the next player (4 players); play carries on the same way', () => {
+    const r = ok(play(four(['8H', ...FILL]), 'A', ['8H']));
+    expect(turnId(r.state)).toBe('C');
+    expect(r.state.direction).toBe(1);
+    expect(skippedWho(r.events)).toEqual(['B']);
+    expect(turnId(ok(act(r.state, { type: 'draw', playerId: 'C' })).state)).toBe('D');
+  });
+
+  it('Example 17b: an 8 skips in the current direction when play is reversed (4 players)', () => {
+    const s = { ...four(['8H', ...FILL]), direction: -1 as const };
+    const r = ok(play(s, 'A', ['8H']));
+    expect(skippedWho(r.events)).toEqual(['D']);
+    expect(turnId(r.state)).toBe('C');
   });
 
   it('Example 18: with 2 players an 8 returns the turn to the player; if they cannot play they must draw', () => {
-    const s = scenario({ hands: { A: ['8H', '9C', '4C', '3C'], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
-    const r = ok(play(s, 'A', ['8H']));
+    const r = ok(play(two(['8H', '9C', '4C', '3C']), 'A', ['8H']));
     expect(turnId(r.state)).toBe('A');
+    expect(r.state.direction).toBe(1);
+    expect(r.events).toContainEqual({ type: 'skipped', playerId: 'A', who: 'B' });
     // 9C/4C/3C do not match 8H / hearts: A must draw
     expect(play(r.state, 'A', ['9C'])).toMatchObject({ ok: false, reason: 'Must match ♥ or an 8' });
     const d = ok(act(r.state, { type: 'draw', playerId: 'A' }));
     expect(turnId(d.state)).toBe('B');
   });
 
-  it('Example 19: two 8s together with 4 players reverse twice (net no change)', () => {
-    const r = ok(play(four(), 'A', ['8H', '8S']));
-    expect(r.state.direction).toBe(1);
-    expect(turnId(r.state)).toBe('B');
-    expect(r.events.filter((e) => e.type === 'reversed')).toHaveLength(2);
-  });
-
-  it('Example 20: two 8s with 2 players: the player still goes again', () => {
-    const s = scenario({ hands: { A: ['8H', '8S', '9C', '4C'], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
-    const r = ok(play(s, 'A', ['8H', '8S']));
-    expect(turnId(r.state)).toBe('A');
+  it('Example 19: n eights skip n players (two 8s with 4 players skip B and C)', () => {
+    const r = ok(play(four(['8H', '8S', ...FILL]), 'A', ['8H', '8S']));
+    expect(turnId(r.state)).toBe('D');
+    expect(skippedWho(r.events)).toEqual(['B', 'C']);
     expect(r.state.direction).toBe(1);
   });
 
-  it('Example 21: a 7 makes the next player miss their turn (3 players)', () => {
-    const s = scenario({ hands: { A: ['7H', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] }, top: '5H', turn: 'A' });
-    const r = ok(play(s, 'A', ['7H']));
+  it('Example 20: two 8s with 3 players skip both opponents and the player goes again; with 2 players too (once)', () => {
+    const r3 = ok(play(three(['8H', '8S', ...FILL]), 'A', ['8H', '8S']));
+    expect(skippedWho(r3.events)).toEqual(['B', 'C']);
+    expect(turnId(r3.state)).toBe('A');
+    const r2 = ok(play(two(['8H', '8S', '9C', '4C']), 'A', ['8H', '8S']));
+    expect(turnId(r2.state)).toBe('A');
+    expect(r2.state.direction).toBe(1);
+  });
+
+  it('Example 21: a King reverses direction (3 players)', () => {
+    const r = ok(play(three(['KH', ...FILL]), 'A', ['KH']));
+    expect(r.state.direction).toBe(-1);
     expect(turnId(r.state)).toBe('C');
-    expect(r.events).toContainEqual({ type: 'skipped', playerId: 'A', who: 'B' });
+    expect(r.events).toContainEqual({ type: 'reversed', playerId: 'A', direction: -1 });
+    expect(r.events.some((e) => e.type === 'skipped')).toBe(false);
   });
 
-  it('Example 22: with 2 players a 7 means the player goes again', () => {
-    const s = scenario({ hands: { A: ['7H', '9H', '4C', '3C'], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
-    const r = ok(play(s, 'A', ['7H']));
+  it('Example 22: a King reverses direction (4 players); play then continues the other way', () => {
+    const r = ok(play(four(['KH', ...FILL]), 'A', ['KH']));
+    expect(r.state.direction).toBe(-1);
+    expect(turnId(r.state)).toBe('D');
+    const r2 = ok(play(r.state, 'D', ['4H']));
+    expect(turnId(r2.state)).toBe('C');
+  });
+
+  it('Example 23: with 2 players a King returns the turn to the player (and flips the direction)', () => {
+    const r = ok(play(two(['KH', '9H', '4C', '3C']), 'A', ['KH']));
     expect(turnId(r.state)).toBe('A');
+    expect(r.state.direction).toBe(-1);
+    expect(r.events.some((e) => e.type === 'skipped')).toBe(false);
     expect(play(r.state, 'A', ['9H']).ok).toBe(true);
   });
 
-  it('Example 23: n sevens skip n players (two 7s with 4 players skip B and C)', () => {
-    const s = scenario({
-      hands: { A: ['7H', '7S', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'], D: ['4H', '5C', '9S'] },
-      top: '5H',
-      turn: 'A',
-    });
-    const r = ok(play(s, 'A', ['7H', '7S']));
-    expect(turnId(r.state)).toBe('D');
-    expect(r.events.filter((e) => e.type === 'skipped').map((e) => (e as any).who)).toEqual(['B', 'C']);
+  it('Example 40: two Kings together reverse twice: net no change with 3-4 players', () => {
+    for (const mk of [three, four]) {
+      const r = ok(play(mk(['KH', 'KS', ...FILL]), 'A', ['KH', 'KS']));
+      expect(r.state.direction).toBe(1);
+      expect(turnId(r.state)).toBe('B');
+      expect(r.events.filter((e) => e.type === 'reversed')).toHaveLength(2);
+    }
+  });
+
+  it('Example 41: two Kings with 2 players: the player still goes again', () => {
+    const r = ok(play(two(['KH', 'KS', '9C', '4C']), 'A', ['KH', 'KS']));
+    expect(turnId(r.state)).toBe('A');
+    expect(r.state.direction).toBe(1);
+  });
+
+  it('Example 42: a 7 is an ordinary card: no skip, no reverse (2, 3 and 4 players)', () => {
+    for (const [mk, next] of [[two, 'B'], [three, 'B'], [four, 'B']] as const) {
+      const r = ok(play(mk(['7H', ...FILL]), 'A', ['7H']));
+      expect(turnId(r.state)).toBe(next);
+      expect(r.state.direction).toBe(1);
+      expect(eventTypes(r.events)).toEqual(['played', 'turn']);
+    }
+  });
+
+  it('a King and an 8 together are not a same-rank play', () => {
+    expect(play(three(['KH', '8H', ...FILL]), 'A', ['KH', '8H'])).toMatchObject({ ok: false, code: 'MIXED_RANKS' });
+  });
+
+  it('a reversal then a skip: the skip follows the new direction (8 after King on separate turns)', () => {
+    const s1 = ok(play(four(['KH', ...FILL]), 'A', ['KH'])).state; // D to move, direction -1
+    const s2 = scenario({ hands: { A: ['4C', '5C', '6D'], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'], D: ['8H', '3H', '9S'] }, top: '5H', turn: 'D', direction: s1.direction });
+    const r = ok(play(s2, 'D', ['8H']));
+    expect(skippedWho(r.events)).toEqual(['C']);
+    expect(turnId(r.state)).toBe('B');
+  });
+});
+
+describe('Queens: anything can be put on a Queen', () => {
+  const mk = (n: number, hand: string[], opts: { top?: string; suit?: 'S' | 'H' | 'D' | 'C'; penalty?: any } = {}) => {
+    const hands: Record<string, string[]> = { A: hand, B: ['3D', '5D', '6H'], C: ['3S', '5S', '6C'], D: ['3H', '5C', '10C'] };
+    const keep = Object.fromEntries(Object.entries(hands).slice(0, n));
+    return scenario({ hands: keep, top: opts.top ?? 'QH', turn: 'A', suit: opts.suit, penalty: opts.penalty });
+  };
+
+  it('Example 43: with a Queen on top any card is accepted (2, 3 and 4 players)', () => {
+    for (const n of [2, 3, 4]) {
+      const r = ok(play(mk(n, ['9S', ...FILL]), 'A', ['9S'])); // off-suit, off-rank
+      expect(topId(r.state)).toBe('9S');
+      expect(r.state.activeSuit).toBe('S');
+      expect(turnId(r.state)).toBe('B');
+    }
+  });
+
+  it('Example 44: a Queen itself follows the normal rule (suit or rank, or on another Queen)', () => {
+    const s = scenario({ hands: { A: ['QS', ...FILL], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' });
+    expect(play(s, 'A', ['QS'])).toMatchObject({ ok: false, code: 'ILLEGAL_CARD', reason: 'Must match ♥ or a 5' });
+    expect(play(scenario({ hands: { A: ['QS', ...FILL], B: ['4D', '5D', '6S'] }, top: 'QH', turn: 'A' }), 'A', ['QS']).ok).toBe(true);
+    expect(play(scenario({ hands: { A: ['QH', ...FILL], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' }), 'A', ['QH']).ok).toBe(true);
+  });
+
+  it('Example 45: Queen + Queen together; and several same-rank cards on a Queen (the rest must still share a rank)', () => {
+    const q2 = ok(play(scenario({ hands: { A: ['QH', 'QS', ...FILL], B: ['4D', '5D', '6S'] }, top: '5H', turn: 'A' }), 'A', ['QH', 'QS']));
+    expect(topId(q2.state)).toBe('QS');
+    expect(q2.state.activeSuit).toBe('S');
+    const pair = ok(play(mk(3, ['9S', '9D', ...FILL]), 'A', ['9S', '9D']));
+    expect(topId(pair.state)).toBe('9D');
+    expect(play(mk(3, ['9S', '4D', ...FILL]), 'A', ['9S', '4D'])).toMatchObject({ ok: false, code: 'MIXED_RANKS' });
+  });
+
+  it('Example 46: cards played on a Queen keep their own effect (2, black Jack, 8, King, Ace, 7)', () => {
+    const two = ok(play(mk(3, ['2S', ...FILL]), 'A', ['2S']));
+    expect(two.state.penalty).toEqual({ kind: 'two', amount: 2 });
+    const jack = ok(play(mk(3, ['JC', ...FILL]), 'A', ['JC']));
+    expect(jack.state.penalty).toEqual({ kind: 'jack', amount: 5 });
+    const eight = ok(play(mk(3, ['8S', ...FILL]), 'A', ['8S']));
+    expect(turnId(eight.state)).toBe('C');
+    const king = ok(play(mk(3, ['KS', ...FILL]), 'A', ['KS']));
+    expect(king.state.direction).toBe(-1);
+    expect(turnId(king.state)).toBe('C');
+    const ace = ok(play(mk(3, ['AS', ...FILL]), 'A', ['AS'], { suit: 'D' }));
+    expect(ace.state.activeSuit).toBe('D');
+    const seven = ok(play(mk(3, ['7S', ...FILL]), 'A', ['7S']));
+    expect(turnId(seven.state)).toBe('B');
+  });
+
+  it('Example 47: a pending penalty still restricts the answer (a Queen cannot be on top of a penalty by play, so it is forced here)', () => {
+    const s = mk(3, ['9S', '2D', ...FILL], { penalty: { kind: 'two', amount: 2 } });
+    expect(play(s, 'A', ['9S'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or pick up 2' });
+    expect(play(s, 'A', ['2D']).ok).toBe(true);
+  });
+
+  it('Example 48: legality helpers agree: with a Queen on top every card is a legal start; with the toggle off none is', () => {
+    const s = mk(3, ['9S', '4D', '7C', 'KS']);
+    expect(getLegalCardIds(toPlayerView(s, 'A')).sort()).toEqual(['4D', '7C', '9S', 'KS']);
+    const off = scenario({ hands: { A: ['9S', '4D'], B: ['5D', '6S', '3S'] }, top: 'QH', turn: 'A', rules: { queenAcceptsAny: false } });
+    expect(getLegalCardIds(toPlayerView(off, 'A'))).toEqual([]);
+    expect(play(off, 'A', ['9S'])).toMatchObject({ ok: false, code: 'ILLEGAL_CARD', reason: 'Must match ♥ or a Queen' });
+  });
+
+  it('active suit after a multi-card play is the LAST card, top is the last card, in played order (J♣ then J♦ and J♦ then J♣)', () => {
+    for (const order of [['JC', 'JD'], ['JD', 'JC']]) {
+      const s = scenario({ hands: { A: [...order, ...FILL], B: ['4D', '5D', '6S'] }, top: 'JH', turn: 'A' });
+      const r = ok(play(s, 'A', order));
+      expect(topId(r.state)).toBe(order[1]);
+      expect(r.state.activeSuit).toBe(order[1][1]);
+      expect((r.events[0] as any).cards.map((c: any) => c.id)).toEqual(order);
+    }
   });
 });
 
@@ -392,14 +516,44 @@ describe('Turn order, stale and duplicate actions', () => {
     expect(r.state.hands.A).toHaveLength(3);
   });
 
-  it('Example 39: the start card is never a power card and all 52 cards are dealt/conserved', () => {
+  it('Example 39: the start card is never a power card (2, 8, Jack, Queen, King, Ace) and all 52 cards are dealt/conserved', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const g = createGame(['A', 'B', 'C', 'D'].slice(0, 2 + (seed % 3)), DEFAULT_RULES, seededRng(seed));
-      expect(['2', '7', '8', 'J', 'A']).not.toContain(g.discard[0].rank);
+      expect(['2', '8', 'J', 'Q', 'K', 'A']).not.toContain(g.discard[0].rank);
       expect(g.activeSuit).toBe(g.discard[0].suit);
       for (const p of g.players) expect(g.hands[p]).toHaveLength(7);
       assertConserved(g);
     }
+  });
+
+  it('Example 39b: a King, Queen or 8 flipped as the start card is buried at the bottom; a 7 is accepted as the start card', () => {
+    // Re-create the first flip of createGame (same shuffle, 7 cards each) to find seeds that flip each rank.
+    const firstFlip = (seed: number, players: number) => {
+      const deck = shuffle(buildDeck(), seededRng(seed));
+      deck.length -= 7 * players;
+      return deck[deck.length - 1];
+    };
+    const seen: Record<string, number> = { K: 0, Q: 0, '8': 0, '7': 0 };
+    for (let seed = 1; seed <= 600; seed++) {
+      const players = 2 + (seed % 3);
+      const flip = firstFlip(seed, players);
+      if (!(flip.rank in seen)) continue;
+      seen[flip.rank]++;
+      const g = createGame(['A', 'B', 'C', 'D'].slice(0, players), DEFAULT_RULES, seededRng(seed));
+      if (flip.rank === '7') {
+        expect(g.discard[0].id).toBe(flip.id);
+        expect(g.activeSuit).toBe(flip.suit);
+      } else {
+        expect(g.discard[0].id).not.toBe(flip.id);
+        expect(['K', 'Q', '8']).not.toContain(g.discard[0].rank);
+        expect(g.drawPile.slice(0, 15).map((c) => c.id)).toContain(flip.id); // buried at the bottom (with any other power cards flipped in a row)
+      }
+      assertConserved(g);
+    }
+    expect(seen.K).toBeGreaterThan(5);
+    expect(seen.Q).toBeGreaterThan(5);
+    expect(seen['8']).toBeGreaterThan(5);
+    expect(seen['7']).toBeGreaterThan(5);
   });
 
   it('the input state is never mutated', () => {
@@ -410,8 +564,21 @@ describe('Turn order, stale and duplicate actions', () => {
     expect(JSON.stringify(s)).toBe(snap);
   });
 
-  it('rules are configurable (toggle sevenSkips off)', () => {
-    const s = scenario({ hands: { A: ['7H', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] }, top: '5H', turn: 'A', rules: withRules({ sevenSkips: false }) });
-    expect(turnId(ok(play(s, 'A', ['7H'])).state)).toBe('B');
+  it('rules are configurable (skipRank / reverseRank can be switched off or moved)', () => {
+    const hands = { A: ['8H', 'KH', '7H', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] };
+    const off = scenario({ hands, top: '5H', turn: 'A', rules: withRules({ skipRank: null, reverseRank: null }) });
+    expect(turnId(ok(play(off, 'A', ['8H'])).state)).toBe('B');
+    const k = ok(play(off, 'A', ['KH']));
+    expect(turnId(k.state)).toBe('B');
+    expect(k.state.direction).toBe(1);
+    const moved = scenario({ hands, top: '5H', turn: 'A', rules: withRules({ skipRank: '7' }) });
+    expect(turnId(ok(play(moved, 'A', ['7H'])).state)).toBe('C');
+    expect(turnId(ok(play(moved, 'A', ['8H'])).state)).toBe('B');
+  });
+
+  it('defaults: 8 skips, King reverses, power ranks are 2, 8, J, Q, K, A', () => {
+    expect(DEFAULT_RULES.skipRank).toBe('8');
+    expect(DEFAULT_RULES.reverseRank).toBe('K');
+    expect([...DEFAULT_RULES.powerRanks].sort()).toEqual(['2', '8', 'A', 'J', 'K', 'Q']);
   });
 });

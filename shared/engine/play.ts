@@ -45,6 +45,7 @@ function startRejection(ctx: PlayContext, card: Card): { code: RejectionCode; re
     return ok ? null : { code: 'MUST_ANSWER_PENALTY', reason: penaltyReason(penalty, rules) };
   }
   if (rules.aceWild && card.rank === 'A') return null;
+  if (rules.queenAcceptsAny && ctx.top.rank === 'Q') return null; // anything goes on a Queen
   if (card.suit === ctx.activeSuit || card.rank === ctx.top.rank) return null;
   return {
     code: 'ILLEGAL_CARD',

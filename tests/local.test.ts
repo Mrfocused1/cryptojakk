@@ -77,9 +77,11 @@ describe('LocalGame (in-browser solo driver)', () => {
       for (const m of msgs) {
         if (m.type !== 'state') continue;
         const json = JSON.stringify(m);
-        for (const id of st.players.filter((p) => p !== LOCAL_PLAYER_ID).flatMap((p) => st.hands[p].map((c) => c.id))) {
-          // an opponent's card may be public once played; it must never appear as a hidden hand entry
-          expect('hand' in m.view && m.view.hand.some((c) => c.id === id)).toBe(false);
+        // a view only ever carries the viewer's own hand (a card id can move between hands over a game, so this is
+        // checked per message, not against the final state)
+        if ('hand' in m.view) {
+          expect(new Set(m.view.hand.map((c) => c.id)).size).toBe(m.view.hand.length);
+          expect(m.view.hand.length).toBe(m.view.handCounts[LOCAL_PLAYER_ID]);
         }
         expect(Object.keys(m.view)).not.toContain('hands');
         expect(Object.keys(m.view)).not.toContain('drawPile');
@@ -190,6 +192,27 @@ describe('LocalGame (in-browser solo driver)', () => {
     expect(b.msgs.at(-1)).toEqual({ type: 'left' });
     expect(b.saves.at(-1)).toBeNull();
     expect(b.game.active).toBe(false);
+  });
+
+  it('restores a save made under the old rules (8 reverses, 7 skips) with the current rules instead of crashing', () => {
+    const a = makeGame({ rng: seededRng(9) });
+    a.game.handle({ type: 'createRoom', mode: 'ai', botCount: 2 });
+    const save = JSON.parse(JSON.stringify(a.room()!.save())) as RoomSave;
+    a.game.close();
+    // rewrite the embedded rules into the legacy shape
+    const { skipRank: _s, reverseRank: _r, ...rest } = save.state!.rules as unknown as Record<string, unknown>;
+    save.state!.rules = { ...rest, eightReverses: true, sevenSkips: true, powerRanks: ['2', '7', '8', 'J', 'A'] } as never;
+
+    const b = makeGame({ rng: seededRng(10) });
+    b.game.restore(save);
+    const st = b.room()!.state as GameState;
+    expect(st.rules.skipRank).toBe('8');
+    expect(st.rules.reverseRank).toBe('K');
+    expect(st.rules.powerRanks).toContain('K');
+    expect(st.rules.powerRanks).not.toContain('7');
+    expect(st.hands).toEqual(save.state!.hands); // the game itself is untouched
+    expect(b.lastView()!.view.rules.skipRank).toBe('8');
+    b.game.close();
   });
 
   it('refuses non-solo requests instead of pretending to host friends rooms', () => {

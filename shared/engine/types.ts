@@ -69,7 +69,7 @@ export interface Rejection {
 
 /**
  * Events. `playerId` is always the player the event is about / who caused it, EXCEPT:
- *  - `skipped`: playerId = the player who played the 7, `who` = the skipped player
+ *  - `skipped`: playerId = the player who played the skip card (8), `who` = the skipped player
  *  - `turn`: playerId = the player whose turn it now is
  *  - `jakkMissed`: playerId = the forgetful player (the one who drew the penalty)
  */

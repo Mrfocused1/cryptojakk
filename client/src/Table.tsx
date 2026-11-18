@@ -138,7 +138,7 @@ function HandCard({ card, index, left, top, z, legal, dim, selected, order, shak
 
 export function Table() {
   const app = useApp();
-  const { view, room, dealing, callout, feed, topOverride, freshDelay } = app;
+  const { view, room, dealing, callout, feed, topOverride, freshDelay, suitOverride } = app;
   const [sel, setSel] = useState<string[]>([]);
   const [armed, setArmed] = useState(false);
   const [suitOpen, setSuitOpen] = useState(false);
@@ -447,7 +447,9 @@ export function Table() {
 
   const top = topOverride ?? view.topDiscard;
   const penalty = view.penalty;
-  const suitRed = view.activeSuit === 'H' || view.activeSuit === 'D';
+  const shownSuit = suitOverride ?? view.activeSuit;
+  const suitRed = shownSuit === 'H' || shownSuit === 'D';
+  const anyOnQueen = view.rules.queenAcceptsAny && top.rank === 'Q' && !penalty;
 
   let turnLabel: ReactElement;
   if (view.winner) turnLabel = <div className="turnlabel">Game over</div>;
@@ -479,8 +481,9 @@ export function Table() {
     { id: '2H', title: '2', text: `+${view.rules.twoPenalty}, stackable`, full: `Next player picks up ${view.rules.twoPenalty}, or answers with another 2 to pass the total on.` },
     { id: 'JS', title: 'Black Jack', text: `+${view.rules.blackJackPenalty}, Jack answers`, full: `Next player picks up ${view.rules.blackJackPenalty}. Only another Jack can answer.` },
     { id: 'JH', title: 'Red Jack', text: 'Cancels a penalty', full: 'Played on a Jack penalty it cancels the whole thing.' },
-    { id: '7C', title: '7', text: 'Skip next player', full: 'The next player misses their turn.' },
-    { id: '8D', title: '8', text: 'Reverse direction', full: 'Play passes the other way round the table.' },
+    { id: '8D', title: '8', text: 'Skip next player', full: 'The next player misses their turn (two 8s skip two players).' },
+    { id: 'KS', title: 'King', text: 'Reverse direction', full: 'Play passes the other way round the table.' },
+    { id: 'QD', title: 'Queen', text: 'Anything goes on it', full: 'Any card can be played on a Queen (unless a penalty is waiting).' },
     { id: 'AS', title: 'Ace', text: 'Wild: name a suit', full: 'Play it on anything (except a penalty) and name the next suit.' },
   ];
 
@@ -533,10 +536,10 @@ export function Table() {
               <CardBack className="p1" />
               <span className="pile-count">{view.drawCount}</span>
             </button>
-            <div className="suit-chip" data-testid="active-suit" data-suit={view.activeSuit} aria-label={`Active suit: ${SUIT_NAME[view.activeSuit]}`}>
-              <span className="suit-cap">SUIT</span>
-              <span className={`suit-box ${suitRed ? 'red' : 'black'}`} key={view.activeSuit}>
-                <SuitIcon suit={view.activeSuit} />
+            <div className="suit-chip" data-testid="active-suit" data-suit={shownSuit} data-any={anyOnQueen ? 'true' : 'false'} aria-label={anyOnQueen ? 'Any card can be played on the Queen' : `Active suit: ${SUIT_NAME[shownSuit]}`}>
+              <span className="suit-cap">{anyOnQueen ? 'QUEEN' : 'SUIT'}</span>
+              <span className={`suit-box ${anyOnQueen ? 'any' : suitRed ? 'red' : 'black'}`} key={anyOnQueen ? 'any' : shownSuit}>
+                {anyOnQueen ? 'ANY' : <SuitIcon suit={shownSuit} />}
               </span>
             </div>
             <div className="pile discard" data-anchor="discard" data-testid="discard-pile" aria-label={`Top card: ${cardName(top)}`}>

@@ -226,7 +226,7 @@ export function Landing() {
               <Icon name="bolt" />
               <span>
                 <strong>Power Cards</strong>
-                <small>2s, Jacks, 7s, 8s and wild Aces keep every turn lively.</small>
+                <small>2s, Jacks, 8s, Kings, Queens and wild Aces keep every turn lively.</small>
               </span>
             </div>
             <div className="why">

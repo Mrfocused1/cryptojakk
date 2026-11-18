@@ -24,13 +24,12 @@ export function cardName(c: Pick<Card, 'rank' | 'suit'>): string {
 
 /** Short effect tag shown on power cards so players learn them. */
 export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: string; danger: boolean } | null {
+  if (rules.skipRank !== null && c.rank === rules.skipRank) return { text: 'SKIP', danger: false };
+  if (rules.reverseRank !== null && c.rank === rules.reverseRank) return { text: 'REV', danger: false };
+  if (rules.queenAcceptsAny && c.rank === 'Q') return { text: 'ANY', danger: false };
   switch (c.rank) {
     case '2':
       return { text: `+${rules.twoPenalty}`, danger: true };
-    case '7':
-      return { text: 'SKIP', danger: false };
-    case '8':
-      return { text: 'REV', danger: false };
     case 'J':
       return isBlackJack(c) ? { text: `+${rules.blackJackPenalty}`, danger: true } : { text: 'BLOCK', danger: false };
     case 'A':

@@ -5,6 +5,7 @@ import {
   type GameState,
   type PlayerAction,
   type PlayerId,
+  type RulesConfig,
   type Rng,
   DEFAULT_RULES,
   applyAction,
@@ -55,6 +56,17 @@ export interface RoomSave {
   hostId: PlayerId;
   seats: Array<{ playerId: PlayerId; name: string; avatar: Avatar; isBot: boolean; ready: boolean }>;
   state: GameState | null;
+}
+
+/**
+ * Saves made under the old rules (8 reverses, 7 skips: `eightReverses` / `sevenSkips` instead of
+ * `skipRank` / `reverseRank` / `queenAcceptsAny`) are carried on with the current default rules, so a game in progress
+ * never silently plays without its skip/reverse cards (or with the retired ones).
+ */
+function migrateSavedState(state: GameState): GameState {
+  const r = state.rules as Partial<RulesConfig> | undefined;
+  if (r && 'skipRank' in r && 'reverseRank' in r && 'queenAcceptsAny' in r) return state;
+  return { ...state, rules: { ...DEFAULT_RULES, powerRanks: [...DEFAULT_RULES.powerRanks] } };
 }
 
 interface Seat extends Profile {
@@ -150,7 +162,7 @@ export class Room {
     for (const s of data.seats) room.seats.push({ ...s, connected: true });
     room.hostId = data.hostId;
     room.phase = data.phase;
-    room.state = data.state;
+    room.state = data.state ? migrateSavedState(data.state) : null;
     return room;
   }
 

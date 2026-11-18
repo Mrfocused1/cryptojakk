@@ -90,7 +90,7 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
   messages and emits the same `roomState` / `state` (redacted view + events) / `error` messages as the server, driving the same `Room`,
   engine and bot AI (bot pacing 900-1600 ms, >= 3000 ms when you owe a JAKK call, ~90% bot JAKK rate; shuffle uses
   `crypto.getRandomValues`). No WebSocket is opened, so solo works offline and on static hosting. The in-progress game is saved in
-  `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it.
+  `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it. A save made under older rules (e.g. when 8 reversed and 7 skipped) is restored with the current rules; an unreadable save is discarded.
 * **Multiplayer connects lazily.** The socket opens only for Play Friends, a `/r/CODE` link, or a stored friends-room session
   (`cj.friendsRoom`). If the very first connection fails or takes > 7 s, the friends screens show "Multiplayer is offline right now"
   with Retry and "Play vs AI instead" instead of a reconnect loop. Endpoint: `VITE_WS_URL` or same-origin `/ws`.

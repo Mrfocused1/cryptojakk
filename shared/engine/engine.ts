@@ -213,11 +213,11 @@ export function applyAction(state: GameState, action: Action, rng: Rng): ApplyRe
             events.push({ type: 'penaltyCancelled', playerId: pid, kind: 'jack', amount: s.penalty.amount });
             s.penalty = null;
           }
-        } else if (card.rank === '8' && rules.eightReverses) {
+        } else if (rules.reverseRank !== null && card.rank === rules.reverseRank) {
           reversals++;
           s.direction = s.direction === 1 ? -1 : 1;
           events.push({ type: 'reversed', playerId: pid, direction: s.direction });
-        } else if (card.rank === '7' && rules.sevenSkips) {
+        } else if (rules.skipRank !== null && card.rank === rules.skipRank) {
           skips++;
         }
       }
@@ -241,7 +241,7 @@ export function applyAction(state: GameState, action: Action, rng: Rng): ApplyRe
       // Next player.
       const n = s.players.length;
       if (n === 2) {
-        // 7s and 8s: the player goes again (however many were played).
+        // skips and reversals: the player goes again (however many were played).
         if (skips > 0 || reversals > 0) {
           const other = s.players[mod(s.turn + 1, 2)];
           for (let i = 0; i < skips; i++) events.push({ type: 'skipped', playerId: pid, who: other });

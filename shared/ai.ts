@@ -72,7 +72,7 @@ function makePlay(view: PlayerView, order: Card[], opts: BotOptions): PlayerActi
 /**
  * Choose what a bot should do, or null when there is nothing to do (not its turn / game over).
  * Strategy: answer penalties when able; otherwise prefer the largest same-rank set, hold Aces until
- * nothing else is playable, prefer attack/skip cards when the next opponent has <= 2 cards,
+ * nothing else is playable, prefer attack/skip/reverse cards when the next opponent has <= 2 cards (and avoid leaving them a Queen),
  * nominate the most-held suit.
  */
 export function chooseBotAction(view: PlayerView, opts: BotOptions): PlayerAction | null {
@@ -113,9 +113,14 @@ export function chooseBotAction(view: PlayerView, opts: BotOptions): PlayerActio
     if (!action || action.type !== 'play') continue;
     const played = action.cardIds.length;
     const clears = played === view.hand.length;
-    const attack = rank === '2' || rank === '7' || rank === '8' || arranged.order.some(isBlackJack);
+    const { skipRank, reverseRank } = view.rules;
+    // Skip and reverse both keep a threatening next opponent (<= 2 cards) from moving right away.
+    const attack = rank === '2' || (skipRank !== null && rank === skipRank) || (reverseRank !== null && rank === reverseRank) || arranged.order.some(isBlackJack);
+    // A Queen on top accepts anything: don't hand that to an opponent who is nearly out (unless it wins).
+    const gift = rank === 'Q' && view.rules.queenAcceptsAny && threatened;
     const score =
       (clears ? 1000 : 0) +
+      (gift ? -400 : 0) +
       (rank === 'A' ? 0 : 500) +
       (threatened && attack ? 200 : 0) +
       played * 20 +

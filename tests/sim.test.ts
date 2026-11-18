@@ -17,6 +17,20 @@ function simulate(n: number, seed: number, rules: RulesConfig = DEFAULT_RULES) {
     const r = applyAction(s, { ...move, playerId: pid }, rng);
     if (!r.ok) throw new Error(`bot made an illegal move: ${r.code} ${r.reason} ${JSON.stringify(move)}`);
     if (r.events.some((e) => e.type === 'jakkMissed')) sawJakkMiss = true;
+    // Fuzz invariants: an accepted first card matches the active suit / top rank unless it is an Ace, answers a
+    // penalty, or goes on a Queen; and the active suit is always the top card's suit unless an Ace nominated one.
+    const played = r.events.find((e) => e.type === 'played');
+    if (played && played.type === 'played') {
+      const first = played.cards[0];
+      const top = s.discard[s.discard.length - 1];
+      const free = first.rank === 'A' || s.penalty !== null || (rules.queenAcceptsAny && top.rank === 'Q');
+      if (!free) expect(first.suit === s.activeSuit || first.rank === top.rank, `illegal first card ${first.id} on ${top.id}/${s.activeSuit}`).toBe(true);
+      expect(new Set(played.cards.map((c) => c.rank)).size).toBe(1);
+      const last = played.cards[played.cards.length - 1];
+      expect(r.state.discard[r.state.discard.length - 1].id).toBe(last.id); // top = LAST card played
+    }
+    const ntop = r.state.discard[r.state.discard.length - 1];
+    expect(r.state.activeSuit === ntop.suit || ntop.rank === 'A', `active suit ${r.state.activeSuit} vs top ${ntop.id}`).toBe(true);
     s = r.state;
     assertConserved(s);
   }
