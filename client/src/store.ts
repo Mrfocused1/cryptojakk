@@ -1,15 +1,18 @@
 // Single connection + state module. React reads it through useApp()/useSel(); components call the exported actions.
 import { useSyncExternalStore } from 'react';
-import type { Card, PlayerAction, PlayerView, Suit } from '@shared/engine';
+import type { Card, HouseRules, MatchOptions, PlayerAction, PlayerView, Suit } from '@shared/engine';
 import {
   type Avatar,
   type ClientMessage,
   type ErrorCode,
+  type HistoryEntry,
+  MAX_BOTS_AI_MODE,
   PROTOCOL_VERSION,
   type RoomSnapshot,
   type ServerMessage,
   normalizeRoomCode,
 } from '@shared/protocol';
+import { SILENT_ERRORS, friendlyError } from './describe';
 import { LocalGame } from '@shared/local';
 import { type RoomSave, isCompatibleSave } from '@shared/room';
 import { cancelFx, planEvents } from './fx';
@@ -49,6 +52,12 @@ export interface JoinError {
   code: ErrorCode;
   message: string;
 }
+/** The server's turn clock for the player to move. Remaining time = deadline - serverNow(). */
+export interface ClientTimer {
+  playerId: string;
+  deadline: number;
+  seconds: number;
+}
 
 export interface AppState {
   identity: Identity | null;
@@ -71,6 +80,11 @@ export interface AppState {
   dealKey: number;
   dealing: boolean;
   rematchRequested: boolean;
+  timer: ClientTimer | null;
+  /** Server move history of the current hand (null until first requested). */
+  history: HistoryEntry[] | null;
+  /** The server refused our protocol version: the page is out of date. */
+  unsupported: boolean;
 }
 
 let state: AppState = {
@@ -92,6 +106,9 @@ let state: AppState = {
   dealKey: 0,
   dealing: false,
   rematchRequested: false,
+  timer: null,
+  history: null,
+  unsupported: false,
 };
 
 const listeners = new Set<() => void>();
@@ -111,6 +128,15 @@ export function useApp(): AppState {
 }
 export function useSel<T>(sel: (s: AppState) => T): T {
   return useSyncExternalStore(subscribe, () => sel(state), () => sel(state));
+}
+
+// ------------------------------------------------------------------ server clock
+
+/** serverTime - clientReceiveTime, measured once per connection from the first timer we receive. */
+let clockOffset: number | null = null;
+/** Best estimate of the server's clock now. */
+export function serverNow(): number {
+  return Date.now() + (clockOffset ?? 0);
 }
 
 // ------------------------------------------------------------------ toast
@@ -322,7 +348,7 @@ if (typeof window !== 'undefined') {
 
 function clearGame(): void {
   cancelFx();
-  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, suitOverride: null, freshDelay: {}, dealing: false });
+  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, suitOverride: null, freshDelay: {}, dealing: false, timer: null, history: null });
 }
 
 function leaveRoomLocally(): void {
@@ -339,6 +365,7 @@ function handle(msg: ServerMessage): void {
       welcomed = true;
       everWelcomed = true;
       attempt = 0;
+      clockOffset = null;
       const hadRoom = state.room !== null;
       patch({ conn: 'open', playerId: msg.playerId });
       if (msg.resumed) {
@@ -376,7 +403,8 @@ function handle(msg: ServerMessage): void {
       const prev = state.view;
       // Capture DOM geometry for animations BEFORE the new view is rendered.
       const start = msg.resync ? null : planEvents(msg.events, prev, msg.view, state.room);
-      patch({ view: msg.view });
+      patch({ view: msg.view, timer: readTimer(msg) });
+      if (historyWatch) send({ type: 'requestHistory' });
       if (start) {
         if (msg.view.version === 0) {
           patch({ dealKey: state.dealKey + 1, dealing: true });
@@ -390,6 +418,9 @@ function handle(msg: ServerMessage): void {
       noteTurn(prev, msg.view, msg.resync);
       return;
     }
+    case 'history':
+      patch({ history: msg.entries });
+      return;
     case 'error':
       handleError(msg.code, msg.message, msg.reqId);
       return;
@@ -405,6 +436,24 @@ function handle(msg: ServerMessage): void {
   }
 }
 
+/** Turn clock of a `state` message. Ignored for solo games (they never run a timer). */
+function readTimer(msg: Extract<ServerMessage, { type: 'state' }>): ClientTimer | null {
+  const t = msg.timer;
+  if (!t || local) return null;
+  if (clockOffset === null) clockOffset = t.serverTime - Date.now();
+  return { playerId: t.playerId, deadline: t.deadline, seconds: t.seconds };
+}
+
+let historyWatch = false;
+/** The History panel is open: ask for the log now and again after every state. */
+export function watchHistory(on: boolean): void {
+  historyWatch = on;
+  if (on) refreshHistory();
+}
+export function refreshHistory(): void {
+  send({ type: 'requestHistory' });
+}
+
 function noteTurn(prev: PlayerView | null, view: PlayerView, resync: boolean): void {
   const mine = view.turn === view.you && !view.handOver;
   const wasMine = prev ? prev.turn === prev.you && !prev.handOver : false;
@@ -416,11 +465,14 @@ function noteTurn(prev: PlayerView | null, view: PlayerView, resync: boolean): v
 
 function handleError(code: ErrorCode, message: string, reqId?: string): void {
   busyVersion = -1;
+  if (code === 'UNSUPPORTED_PROTOCOL') {
+    wantConnect = false;
+    clearTimeout(reconnectTimer);
+    patch({ unsupported: true, joining: false });
+    return;
+  }
+  if (SILENT_ERRORS.includes(code)) return; // normal races; the corrected state follows
   switch (code) {
-    case 'STALE_VERSION':
-    case 'JAKK_ALREADY_DECLARED':
-    case 'NOT_YOUR_TURN':
-      return; // normal races; the corrected state follows
     case 'ROOM_NOT_FOUND':
     case 'ROOM_FULL':
     case 'GAME_IN_PROGRESS':
@@ -428,13 +480,13 @@ function handleError(code: ErrorCode, message: string, reqId?: string): void {
         patch({ joinError: { code, message }, joining: false });
         return;
       }
-      toast(message);
+      toast(friendlyError(code, message));
       return;
     case 'ALREADY_IN_ROOM':
       sendRaw({ type: 'requestState' });
       return;
     default:
-      toast(message);
+      toast(friendlyError(code, message));
   }
 }
 
@@ -513,8 +565,8 @@ function clearLocal(): void {
   }
 }
 
-function startLocal(botCount: number): void {
-  newLocal().handle({ type: 'createRoom', mode: 'ai', botCount });
+function startLocal(botCount: number, houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  newLocal().handle({ type: 'createRoom', mode: 'ai', botCount, ...(houseRules ? { houseRules } : {}), ...(options ? { options } : {}) });
 }
 
 function loadLocalSave(): RoomSave | null {
@@ -536,8 +588,8 @@ export function playNow(): void {
   startLocal(1);
 }
 
-export function playAI(botCount: number): void {
-  startLocal(Math.max(1, Math.min(3, botCount)));
+export function playAI(botCount: number, houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  startLocal(Math.max(1, Math.min(MAX_BOTS_AI_MODE, botCount)), houseRules, options);
 }
 
 export function createFriendsRoom(): void {
@@ -574,6 +626,9 @@ export function removeBot(playerId: string): void {
 }
 export function startGame(): void {
   send({ type: 'startGame' });
+}
+export function setOptions(houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  send({ type: 'setOptions', ...(houseRules ? { houseRules } : {}), ...(options ? { options } : {}), reqId: 'opts' });
 }
 export function nextHand(): void {
   send({ type: 'nextHand' });

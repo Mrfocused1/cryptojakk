@@ -27,51 +27,98 @@ function Confetti() {
   );
 }
 
+const REASON_TEXT: Record<string, string> = {
+  deckExhausted: 'No winner - the deck ran out and two or more players tied for the most cards.',
+  lastStanding: 'Everyone else sat out when the deck ran out, so the last player standing wins.',
+  turnCap: 'No winner - the hand hit the turn limit.',
+};
+
 export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }) {
   const { rematchRequested } = useApp();
-  const iWon = view.winner === view.you;
-  const rematchRef = useRef<HTMLButtonElement>(null);
+  const me = view.you;
+  const target = room.options.handsToWin;
+  const finished = room.phase === 'finished';
+  const between = room.phase === 'handOver';
+  const pending = !finished && !between; // the final state has arrived, the room update is a moment behind
+  const handWinner = view.winner;
+  const iWonHand = handWinner === me;
+  const matchWinner = room.matchWinner;
+  const iWon = finished ? matchWinner === me : iWonHand;
+  const isHost = room.hostId === me;
+  const primaryRef = useRef<HTMLButtonElement>(null);
   const desk = useMedia('(min-width: 1024px)');
   useEffect(() => {
     // Keyboard players land on the primary action; phones are left alone (no stray focus ring).
-    if (desk) rematchRef.current?.focus();
-  }, [desk]);
+    if (desk && !pending) primaryRef.current?.focus();
+  }, [desk, pending]);
   useEffect(() => {
     playSfx(iWon ? 'win' : 'lose');
     if (iWon) vibrate([60, 40, 60]);
   }, [iWon]);
-  const rows = room.players
-    .map((p) => ({ p, count: view.handCounts[p.playerId] ?? 0, won: p.playerId === view.winner }))
-    .sort((a, b) => Number(b.won) - Number(a.won) || a.count - b.count);
-  const winner = rows.find((r) => r.won);
+  const nameOf = (id: string | null) => (id ? (room.players.find((p) => p.playerId === id)?.name ?? 'Someone') : 'Nobody');
+  const rows = view.players
+    .map((id) => room.players.find((p) => p.playerId === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .map((p) => ({ p, count: view.handCounts[p.playerId] ?? 0, won: p.playerId === handWinner, wins: room.scores[p.playerId] ?? 0, out: view.out.includes(p.playerId) }))
+    .sort((a, b) => b.wins - a.wins || Number(b.won) - Number(a.won) || a.count - b.count);
+  const reasonText = view.handOver && view.handOver.reason !== 'finished' ? REASON_TEXT[view.handOver.reason] : null;
+
+  let kicker: string;
+  let title: string;
+  if (finished && target > 1) {
+    kicker = iWon ? 'You win the match!' : 'Match over';
+    title = iWon ? 'Match winner!' : `${nameOf(matchWinner)} wins the match`;
+  } else if (finished) {
+    kicker = iWon ? 'You win!' : 'Game over';
+    title = !handWinner ? 'No winner this hand' : iWon ? 'Hand cleared!' : `${nameOf(handWinner)} wins`;
+  } else {
+    kicker = iWonHand ? 'You win the hand!' : `Hand ${room.handNumber} over`;
+    title = !handWinner ? 'No winner - the deck ran out' : iWonHand ? 'Hand cleared!' : `${nameOf(handWinner)} wins the hand`;
+    if (!handWinner && view.handOver?.reason !== 'deckExhausted') title = 'No winner this hand';
+  }
   return (
-    <div className="results-wrap" data-testid="results">
-      <div className={`results ${iWon ? 'win' : ''}`} role="dialog" aria-modal="true" aria-label="Game over">
+    <div className="results-wrap" data-testid="results" data-phase={room.phase}>
+      <div className={`results ${iWon ? 'win' : ''}`} role="dialog" aria-modal="true" aria-label={kicker}>
         {iWon && <Confetti />}
         <ChipStack color="red" n={4} className="res-chip l" />
         <ChipStack color="black" n={3} className="res-chip r" />
-        <p className="results-kicker">{iWon ? 'You win!' : room.phase === 'handOver' ? 'Hand over' : 'Game over'}</p>
-        <h2 className="results-title">{!view.winner ? 'No winner this hand' : iWon ? 'Hand cleared!' : `${winner?.p.name ?? 'Someone'} wins`}</h2>
+        <p className="results-kicker" data-testid="results-kicker">{kicker}</p>
+        <h2 className="results-title" data-testid="results-title">{title}</h2>
+        {reasonText && <p className="results-reason" data-testid="results-reason">{reasonText}</p>}
+        {target > 1 && (
+          <p className="results-match" data-testid="results-match">
+            {finished ? `Final score, first to ${target} hands` : `Hand ${room.handNumber} - first to ${target} hands wins the match`}
+          </p>
+        )}
         <ul className="results-list">
-          {rows.map(({ p, count, won }) => (
-            <li key={p.playerId} className={won ? 'won' : ''}>
+          {rows.map(({ p, count, won, wins, out }) => (
+            <li key={p.playerId} className={won ? 'won' : ''} data-testid="results-row">
               <Avatar avatar={p.avatar} size={36} />
               <span className="rn">
                 {p.name}
-                {p.playerId === view.you && <i> (you)</i>}
+                {p.playerId === me && <i> (you)</i>}
               </span>
-              <span className="rc">{won ? 'Out!' : `${count} ${count === 1 ? 'card' : 'cards'} left`}</span>
+              {target > 1 && (
+                <span className="rs" data-testid="results-score" aria-label={`${wins} hands won`}>
+                  {Array.from({ length: target }, (_, i) => (
+                    <i key={i} className={i < wins ? 'on' : ''}>
+                      ★
+                    </i>
+                  ))}
+                </span>
+              )}
+              <span className="rc">{won ? 'Out!' : out ? 'Sat out' : `${count} ${count === 1 ? 'card' : 'cards'} left`}</span>
             </li>
           ))}
         </ul>
         <div className="results-actions">
-          {room.phase === 'handOver' ? (
-            <button ref={rematchRef} className="pill primary wide" data-testid="next-hand" onClick={nextHand} disabled={room.hostId !== view.you}>
-              {room.hostId === view.you ? <>Next hand <Icon name="next" /></> : 'Waiting for the host...'}
+          {finished ? (
+            <button ref={primaryRef} className="pill primary wide" data-testid="rematch" onClick={rematch} disabled={rematchRequested && room.mode === 'friends'}>
+              {rematchRequested && room.mode === 'friends' ? 'Waiting...' : <>Rematch <Icon name="next" /></>}
             </button>
           ) : (
-            <button ref={rematchRef} className="pill primary wide" data-testid="rematch" onClick={rematch} disabled={rematchRequested && room.mode === 'friends'}>
-              {rematchRequested && room.mode === 'friends' ? 'Waiting...' : <>Rematch <Icon name="next" /></>}
+            <button ref={primaryRef} className="pill primary wide" data-testid="next-hand" onClick={nextHand} disabled={!isHost || pending}>
+              {isHost ? <>Next hand <Icon name="next" /></> : 'Waiting for the host...'}
             </button>
           )}
           <button className="pill secondary wide" data-testid="leave" onClick={leaveRoom}>

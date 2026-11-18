@@ -35,12 +35,12 @@ export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: s
     case 'A':
       return { text: 'WILD', danger: false };
     default:
-      return null;
+      return null; // 7 and every plain card: no effect
   }
 }
 
-export function CardFace({ card, rules, className = '', style }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties }) {
-  const tag = powerTag(card, rules);
+export function CardFace({ card, rules, className = '', style, noTag = false }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties; noTag?: boolean }) {
+  const tag = noTag ? null : powerTag(card, rules);
   const court = card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' ? card.rank : null;
   return (
     <div className={`card ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${court && tag ? 'has-tag' : ''} ${className}`} style={style}>
@@ -213,12 +213,13 @@ export function Kbd({ k, className = '' }: { k: string; className?: string }) {
 }
 
 export const SHORTCUTS: Array<{ keys: string[]; text: string }> = [
-  { keys: ['1', '-', '9'], text: 'Pick card by position' },
+  { keys: ['1', '-', '9'], text: 'Add card by position' },
   { keys: ['←', '→'], text: 'Move between cards' },
-  { keys: ['Enter', 'Space'], text: 'Select the focused card' },
-  { keys: ['P'], text: 'Play selection' },
-  { keys: ['D'], text: 'Draw / pick up' },
-  { keys: ['J'], text: 'Call or arm JAKK' },
+  { keys: ['Enter', 'Space'], text: 'Select the focused card, in play order' },
+  { keys: ['Backspace'], text: 'Remove the last selected card' },
+  { keys: ['P'], text: 'Play the selection' },
+  { keys: ['D'], text: 'Draw / take the pickup' },
+  { keys: ['J'], text: 'Toggle JAKK' },
   { keys: ['Esc'], text: 'Clear selection / close' },
   { keys: ['?'], text: 'How to play' },
 ];
@@ -341,6 +342,10 @@ const ICONS: Record<string, ReactNode> = {
   down: <path d="m5.500 9.500 6.500 6.500 6.500-6.500" />,
   plus: <path d="M12 5v14M5 12h14" />,
   home: <path d="M4 11 12 4l8 7v9h-5.500v-6h-5v6H4z" />,
+  list: <path d="M8.500 6.500H20M8.500 12H20M8.500 17.500H20M4 6.500h.01M4 12h.01M4 17.500h.01" />,
+  star: <path d="m12 3.500 2.600 5.400 5.900.8-4.300 4.100 1 5.800L12 16.800l-5.200 2.800 1-5.800-4.300-4.100 5.900-.8z" />,
+  sliders: <path d="M4 7h9M17 7h3M4 17h3M11 17h9M13 4.500v5M7 14.500v5" />,
+  refresh: <path d="M19.500 12a7.500 7.500 0 1 1-2.200-5.300M19.500 4.500v4h-4" />,
 };
 
 export function Icon({ name, className = '' }: { name: keyof typeof ICONS | string; className?: string }) {
@@ -443,6 +448,7 @@ export function useMuted(): boolean {
 }
 
 export function AppHeader({
+  onHistory,
   onBack,
   backLabel = 'Back',
   inGame = false,
@@ -455,6 +461,7 @@ export function AppHeader({
   left,
   className = '',
 }: {
+  onHistory?: () => void;
   onBack?: () => void;
   backLabel?: string;
   inGame?: boolean;
@@ -509,10 +516,27 @@ export function AppHeader({
             <Icon name="help" className="row-ico" />
             <span className="row-t">
               <strong>How to Play</strong>
-              <small>Power cards, JAKK and the basics</small>
+              <small>Cards, sequences, JAKK and house rules</small>
             </span>
             <Icon name="next" className="row-go" />
           </button>
+          {onHistory && (
+            <button
+              className="row"
+              data-testid="menu-history"
+              onClick={() => {
+                setOpen(false);
+                onHistory();
+              }}
+            >
+              <Icon name="list" className="row-ico" />
+              <span className="row-t">
+                <strong>Move history</strong>
+                <small>Every move of this hand, in plain words</small>
+              </span>
+              <Icon name="next" className="row-go" />
+            </button>
+          )}
           {!inGame && (
             <button className="row" onClick={() => go('/profile')}>
               <Icon name="user" className="row-ico" />
