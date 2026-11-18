@@ -3,23 +3,11 @@ import { type Card, type RulesConfig, type Suit, DEFAULT_RULES, SUIT_NAME, isBla
 import type { Avatar as AvatarT } from '@shared/protocol';
 import { takeOver, useApp } from './store';
 import { navigate } from './router';
+import { CourtArt } from './CourtArt';
+import { SUIT_PATH } from './suitPaths';
 import { isMuted, setMuted, subscribeMuted } from './sound';
 
 // ------------------------------------------------------------------ suits and cards
-
-const SUIT_PATH: Record<Suit, ReactNode> = {
-  S: <path d="M12 1.6C9.2 6 3.6 9.4 3.6 14.2a4.3 4.3 0 0 0 7 3.3c-.1 1.700-.7 3.200-1.900 4.900h6.600c-1.200-1.700-1.800-3.200-1.900-4.900a4.300 4.300 0 0 0 7-3.300C20.400 9.400 14.800 6 12 1.600z" />,
-  H: <path d="M12 22C4.600 16.400 2 12.600 2 8.900A5 5 0 0 1 12 6.700 5 5 0 0 1 22 8.900c0 3.700-2.600 7.500-10 13.100z" />,
-  D: <path d="M12 1.500 20.500 12 12 22.500 3.500 12z" />,
-  C: (
-    <>
-      <circle cx="12" cy="6.800" r="4.800" />
-      <circle cx="6.200" cy="14" r="4.800" />
-      <circle cx="17.800" cy="14" r="4.800" />
-      <path d="M12 11 9.600 22.200h4.800z" />
-    </>
-  ),
-};
 
 export function SuitIcon({ suit, className }: { suit: Suit; className?: string }) {
   return (
@@ -54,8 +42,10 @@ export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: s
 
 export function CardFace({ card, rules, className = '', style }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties }) {
   const tag = powerTag(card, rules);
+  const court = card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' ? card.rank : null;
   return (
-    <div className={`card ${isRedSuit(card.suit) ? 'red' : 'black'} ${className}`} style={style}>
+    <div className={`card ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${court && tag ? 'has-tag' : ''} ${className}`} style={style}>
+      {court && <CourtArt rank={court} suit={card.suit} />}
       <span className="corner">
         <b>{card.rank}</b>
         <SuitIcon suit={card.suit} />

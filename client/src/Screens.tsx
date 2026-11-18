@@ -83,7 +83,7 @@ function HeroCards({ className = '' }: { className?: string }) {
         <CardFace card={card('AS')} />
       </div>
       <div className="hc-card c2">
-        <CardFace card={card('2H')} />
+        <CardFace card={card('KH')} />
       </div>
       <div className="hc-card c3">
         <CardBack />

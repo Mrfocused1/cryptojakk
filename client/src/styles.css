@@ -843,6 +843,13 @@ button.row:active {
 }
 
 /* ------------------------------------------------------------ cards: classic faces, red lattice backs */
+/* Registered so --w resolves to a length on the card itself: court cards are size containers, which would
+   otherwise re-base any cqw/cqh units inside --cw onto the card. */
+@property --w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 64px;
+}
 .card {
   --w: var(--cw, 64px);
   position: relative;
@@ -887,6 +894,44 @@ button.row:active {
   width: calc(var(--w) * 0.56);
   height: calc(var(--w) * 0.56);
   transform: translate(-50%, -50%);
+}
+/* court cards: illustrated double-ended panel to the right of the index; typographic fallback when tiny */
+.card.court {
+  container-type: inline-size;
+}
+.card .art {
+  display: none;
+  position: absolute;
+  left: calc(var(--w) * 0.385);
+  top: calc(var(--w) * 0.2);
+  width: calc(var(--w) * 0.56);
+  height: calc(var(--w) * 1.008);
+  filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.4));
+}
+.card.court .art {
+  display: block;
+}
+.card.court.has-tag .art {
+  top: calc(var(--w) * 0.08);
+}
+.card.court .pip {
+  display: none;
+}
+.card.court .corner {
+  z-index: 1;
+}
+@container (max-width: 49px) {
+  .card.court .art {
+    display: none;
+  }
+  .card.court .pip {
+    display: block;
+  }
+}
+@container (max-width: 76px) {
+  .card .art .fine {
+    display: none;
+  }
 }
 .card .tag {
   position: absolute;
@@ -1451,7 +1496,7 @@ button.row:active {
   top: 112px;
   width: 0;
   height: 0;
-  --cw: 112px;
+  --cw: 124px;
 }
 .hc-card {
   position: absolute;
@@ -1460,13 +1505,16 @@ button.row:active {
   filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.5));
 }
 .hc-card.c3 {
-  transform: translate(-84px, 22px) rotate(-22deg);
+  z-index: 0;
+  transform: translate(-98px, 26px) rotate(-24deg);
 }
 .hc-card.c1 {
-  transform: translate(-34px, 0) rotate(-9deg);
+  z-index: 1;
+  transform: translate(-48px, 4px) rotate(-11deg);
 }
 .hc-card.c2 {
-  transform: translate(40px, 8px) rotate(11deg);
+  z-index: 2;
+  transform: translate(42px, 10px) rotate(8deg);
 }
 .hero-cards.small {
   position: relative;
@@ -2896,17 +2944,17 @@ button.row:active {
     height: auto;
   }
   .hero-cards {
-    --cw: clamp(104px, 13dvh, 150px);
+    --cw: clamp(112px, 14.5dvh, 156px);
     top: 118px;
   }
   .hc-card.c3 {
-    transform: translate(calc(var(--cw) * -0.78), 26px) rotate(-22deg);
+    transform: translate(calc(var(--cw) * -0.9), 26px) rotate(-24deg);
   }
   .hc-card.c1 {
-    transform: translate(calc(var(--cw) * -0.3), 0) rotate(-9deg);
+    transform: translate(calc(var(--cw) * -0.42), 4px) rotate(-11deg);
   }
   .hc-card.c2 {
-    transform: translate(calc(var(--cw) * 0.38), 10px) rotate(11deg);
+    transform: translate(calc(var(--cw) * 0.34), 10px) rotate(8deg);
   }
   .table-arc {
     width: min(60%, 640px);
