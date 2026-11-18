@@ -1,8 +1,8 @@
 # Crypto Jakk
 
-Mobile-first browser card game: UK-style Blackjack (the card-**shedding** game, like Crazy Eights / Switch).
+Browser card game (phone, tablet and desktop): UK-style Blackjack (the card-**shedding** game, like Crazy Eights / Switch).
 The repo contains a pure rules engine, the shared protocol/types, a bot AI, a Node WebSocket server and the React client
-(`client/`, mobile-first, see "Client" below).
+(`client/`, responsive phone / tablet / desktop, see "Client" below).
 
 * Rules (PROVISIONAL, all toggles in `RulesConfig`): [`docs/RULEBOOK.md`](docs/RULEBOOK.md)
 * Wire protocol (read this first if you are building the client): [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
@@ -79,7 +79,7 @@ client/src/store.ts           the single state module: solo games (LocalGame) or
 client/src/fx.ts              turns `events` into an ordered presentation queue (feed line, callouts, flights, sfx)
 client/src/router.ts          ~50-line History-API router (/, /friends, /ai, /how-to-play, /profile, /r/CODE, /play)
 client/src/Table.tsx          game table: seats, piles, hand, action bar, suit picker, menu
-client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio, no files), identity.ts, styles.css
+client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio, no files), prefs.ts, identity.ts, styles.css
 ```
 
 * **Screens** are chosen from the server state first (room phase `lobby`/`rematch` -> Lobby, `playing`/`finished` -> Table) and only
@@ -101,6 +101,41 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
 * **Dev**: `npm run dev` (Vite :5173 proxies `/ws` to the server on :3001). **Prod**: `npm run build && npm start`.
 * **Link previews**: `og:image` / `twitter:image` in `client/index.html` are root-relative (`/og.png`). WhatsApp and most crawlers need an
   absolute URL, so replace them with `https://your-domain/og.png` when you deploy.
+
+### Look and feel
+
+Casino-felt green system modelled on `design/references/` (tokens from `design/references/design-sample.html`): deep green felt with a
+radial spotlight and grain, white heavy-italic Poppins headings (800/900 italic are self-hosted via `@fontsource`), glossy green pill
+buttons, outlined translucent panels, a white tilted logo tile, classic white cards with red-lattice backs and a gold table arc.
+The chips and cards are decoration drawn in SVG/CSS (`ChipStack`, `DecoChips` in `components.tsx`); there is no money, wallet or
+betting anywhere in the game. Profile & Settings (`/profile`) holds name, avatar, sound and "reduce animation" (`cj.reduce`,
+`prefs.ts`, also honours `prefers-reduced-motion`).
+
+### Responsive breakpoints
+
+Plain CSS media/container queries in `client/src/styles.css`, no libraries.
+
+| width | layout |
+|---|---|
+| phone, up to 600px | single column, header with centred logo tile + menu, bottom-sheet dialogs |
+| tablet, 601-1023px | roomier single column (bigger cards, wider table, centred content, centred modal dialogs, single-line feed) |
+| desktop, 1024px+ (content up to ~1440px, centred beyond) | table fills the viewport: a rounded felt table with opponents seated around it (1 = top, 2 = top-left/right, 3 = left/top/right), hand fanned along the bottom with Draw / JAKK / Play beside it, and a right-hand panel (game log, power-card cheat-sheet, room code + invite when in a friends room, shortcut list). Landing is a top-nav hero page; Play Friends shows Create and Join side by side; the lobby is two columns; How to Play is a multi-column grid. Short laptop viewports (<= 800px high) drop the shortcut box and tighten spacing. |
+
+### Keyboard shortcuts (at the table)
+
+| key | action |
+|---|---|
+| `1`-`9`, `0` | focus and select/deselect the card at that position in your sorted hand |
+| `Left` / `Right` (also `Up`/`Down`, `Home`/`End`) | move focus between cards; `Enter` / `Space` selects the focused card |
+| `P` (or `Enter` when no card is focused) | play the selection |
+| `D` | draw / pick up |
+| `J` | call JAKK, or arm it while playing your second-last card |
+| `Esc` | clear selection (or close a dialog) |
+| `?` | how to play |
+| `S` `H` `D` `C` or arrows + `Enter` | suit picker |
+
+Shortcuts never fire while typing in an input. Key hints appear on the buttons at desktop widths only; legal cards lift on hover
+(pointer cursor), illegal ones show `not-allowed`.
 
 ## Deploying
 
