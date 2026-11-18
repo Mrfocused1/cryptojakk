@@ -3,6 +3,7 @@
 import { type Card, type GameEvent, type PlayerView, SUIT_SYMBOL, isRedSuit } from '@shared/engine';
 import type { RoomSnapshot } from '@shared/protocol';
 import { playSfx, type Sfx } from './sound';
+import { isReduced } from './prefs';
 import { type Callout, type Flight, type Rect, getState, patch } from './store';
 
 let timers: ReturnType<typeof setTimeout>[] = [];
@@ -47,7 +48,7 @@ export function cardLabel(c: Card): string {
 
 /** Capture DOM geometry NOW (before React re-renders the new view) and return a function that starts the queue. */
 export function planEvents(events: GameEvent[], prev: PlayerView | null, view: PlayerView, room: RoomSnapshot | null): () => void {
-  const reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = isReduced();
   const me = view.you;
   const nameOf = (id: string) => (id === me ? 'You' : (room?.players.find((p) => p.playerId === id)?.name ?? 'Player'));
   const verb = (id: string, you: string, other: string) => (id === me ? you : other);

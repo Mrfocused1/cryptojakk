@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { PlayerView } from '@shared/engine';
 import type { RoomSnapshot } from '@shared/protocol';
-import { Avatar } from './components';
+import { Avatar, ChipStack, Icon, useMedia } from './components';
 import { leaveRoom, rematch, useApp } from './store';
 import { playSfx, vibrate } from './sound';
 
@@ -30,6 +30,12 @@ function Confetti() {
 export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }) {
   const { rematchRequested } = useApp();
   const iWon = view.winner === view.you;
+  const rematchRef = useRef<HTMLButtonElement>(null);
+  const desk = useMedia('(min-width: 1024px)');
+  useEffect(() => {
+    // Keyboard players land on the primary action; phones are left alone (no stray focus ring).
+    if (desk) rematchRef.current?.focus();
+  }, [desk]);
   useEffect(() => {
     playSfx(iWon ? 'win' : 'lose');
     if (iWon) vibrate([60, 40, 60]);
@@ -42,8 +48,10 @@ export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }
     <div className="results-wrap" data-testid="results">
       <div className={`results ${iWon ? 'win' : ''}`} role="dialog" aria-modal="true" aria-label="Game over">
         {iWon && <Confetti />}
+        <ChipStack color="red" n={4} className="res-chip l" />
+        <ChipStack color="black" n={3} className="res-chip r" />
         <p className="results-kicker">{iWon ? 'You win!' : 'Game over'}</p>
-        <h2 className="results-title tilt">{iWon ? 'Hand cleared!' : `${winner?.p.name ?? 'Someone'} wins`}</h2>
+        <h2 className="results-title">{iWon ? 'Hand cleared!' : `${winner?.p.name ?? 'Someone'} wins`}</h2>
         <ul className="results-list">
           {rows.map(({ p, count, won }) => (
             <li key={p.playerId} className={won ? 'won' : ''}>
@@ -57,10 +65,10 @@ export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }
           ))}
         </ul>
         <div className="results-actions">
-          <button className="btn primary wide" data-testid="rematch" onClick={rematch} disabled={rematchRequested && room.mode === 'friends'}>
-            {rematchRequested && room.mode === 'friends' ? 'Waiting...' : 'Rematch'}
+          <button ref={rematchRef} className="pill primary wide" data-testid="rematch" onClick={rematch} disabled={rematchRequested && room.mode === 'friends'}>
+            {rematchRequested && room.mode === 'friends' ? 'Waiting...' : <>Rematch <Icon name="next" /></>}
           </button>
-          <button className="btn secondary wide" data-testid="leave" onClick={leaveRoom}>
+          <button className="pill secondary wide" data-testid="leave" onClick={leaveRoom}>
             Leave
           </button>
         </div>
