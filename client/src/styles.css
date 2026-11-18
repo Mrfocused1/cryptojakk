@@ -4856,3 +4856,31 @@ button.row:active {
     padding: 14px 0;
   }
 }
+@media (min-width: 1024px) {
+  .side {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #1b7a45 transparent;
+    padding-right: 2px;
+  }
+  .side > .side-box {
+    flex-shrink: 0;
+  }
+  .side > .side-log {
+    flex: 1 0 auto;
+    min-height: 250px;
+  }
+}
+/* the in-game rules strip hosts a dialog: it must not become the dialog's containing block */
+.rules-chips.in-strip {
+  position: static;
+  z-index: auto;
+}
+.rules-chips.in-lobby.top {
+  margin: 0 0 14px;
+}
+@media (max-width: 600px) and (max-height: 700px) {
+  .table-screen .feed:not(.hint) {
+    display: none;
+  }
+}

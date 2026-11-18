@@ -91,12 +91,16 @@ export function Logo({ className = '' }: { className?: string }) {
 
 export function Sheet({ open, onClose, title, children, tall = false }: { open: boolean; onClose: () => void; title: string; children: ReactNode; tall?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose without re-subscribing on every render: a re-render in the middle of a keydown (the table
+  // sets its keyboard flag) would otherwise swap the listener and the first Escape would be lost.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        closeRef.current();
         return;
       }
       if (e.key !== 'Tab' || !ref.current) return;
@@ -120,7 +124,7 @@ export function Sheet({ open, onClose, title, children, tall = false }: { open: 
       window.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="sheet-wrap" onClick={onClose}>

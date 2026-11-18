@@ -176,7 +176,7 @@ interface HandCardProps {
 function HandCard({ card, index, left, top, z, legal, dim, selected, cover, order, shake, hint, fresh, dealing, view, onTap }: HandCardProps) {
   const label = `${cardName(card)}${selected ? `, selected, play order ${order}` : cover ? ', can cover the Queen' : legal ? ', playable' : dim ? ', not playable' : ''}`;
   const cls = ['hc', legal ? 'legal' : '', cover ? 'cover' : '', dim ? 'dim' : '', selected ? 'selected' : '', shake ? 'shake' : '', fresh !== undefined ? 'fresh' : '', dealing ? 'dealt' : ''].filter(Boolean).join(' ');
-  const style: CSSProperties = { left, top, zIndex: selected ? 200 : z, ['--i' as string]: index, ['--d' as string]: `${fresh ?? 0}ms` };
+  const style: CSSProperties = { left, top, zIndex: z, ['--i' as string]: index, ['--d' as string]: `${fresh ?? 0}ms` };
   return (
     <button className={cls} style={style} data-hand-card={card.id} data-legal={legal ? 'true' : 'false'} data-selected={selected ? 'true' : 'false'} data-cover={cover ? 'true' : 'false'} aria-label={label} aria-pressed={selected} onClick={() => onTap(card)}>
       <CardFace card={card} rules={view.rules} />
@@ -434,7 +434,7 @@ export function Table() {
   const step = Math.max(minStep, Math.min(idealStep, perRow <= 1 ? idealStep : (avail - cw) / (perRow - 1)));
   const rowW = cw + (perRow - 1) * step;
   const innerW = Math.max(handW, rowW + pad * 2);
-  const lift = isDesk ? 44 : 36;
+  const lift = isDesk ? 44 : 42;
   const rowGap = Math.round(ch * 0.52);
   const handH = lift + ch + (rows - 1) * rowGap + 6;
 

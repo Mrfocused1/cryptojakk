@@ -137,6 +137,7 @@ export function Lobby() {
         </div>
 
         <div className="lobby-col lobby-people">
+          <RulesChips houseRules={room.houseRules} options={room.options} className="in-lobby top" />
           <h2 className="section-title">
             Players <span>{room.players.length}/{room.maxPlayers}</span>
           </h2>
@@ -177,7 +178,6 @@ export function Lobby() {
             )}
           </div>
 
-          <RulesChips houseRules={room.houseRules} options={room.options} className="in-lobby" />
           <p className="rules-line">
             {room.minPlayers}-{room.maxPlayers} players. Match the suit or rank, play runs and same-rank sets, and be first to empty your hand. Declare JAKK before the turn you finish on.
           </p>

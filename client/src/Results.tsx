@@ -73,8 +73,7 @@ export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }
     title = !handWinner ? 'No winner this hand' : iWon ? 'Hand cleared!' : `${nameOf(handWinner)} wins`;
   } else {
     kicker = iWonHand ? 'You win the hand!' : `Hand ${room.handNumber} over`;
-    title = !handWinner ? 'No winner - the deck ran out' : iWonHand ? 'Hand cleared!' : `${nameOf(handWinner)} wins the hand`;
-    if (!handWinner && view.handOver?.reason !== 'deckExhausted') title = 'No winner this hand';
+    title = !handWinner ? (view.handOver?.reason === 'deckExhausted' ? 'No winner: deck ran out' : 'No winner this hand') : iWonHand ? 'Hand cleared!' : `${nameOf(handWinner)} wins the hand`;
   }
   return (
     <div className="results-wrap" data-testid="results" data-phase={room.phase}>

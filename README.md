@@ -119,7 +119,7 @@ Plain CSS media/container queries in `client/src/styles.css`, no libraries.
 |---|---|
 | phone, up to 600px | single column, header with centred logo tile + menu, bottom-sheet dialogs |
 | tablet, 601-1023px | roomier single column (bigger cards, wider table, centred content, centred modal dialogs, single-line feed) |
-| desktop, 1024px+ (content up to ~1440px, centred beyond) | table fills the viewport: a rounded felt table with opponents seated around it (1 = top, 2 = top-left/right, 3 = left/top/right), hand fanned along the bottom with Draw / JAKK / Play beside it, and a right-hand panel (game log, power-card cheat-sheet, room code + invite when in a friends room, shortcut list). Landing is a top-nav hero page; Play Friends shows Create and Join side by side; the lobby is two columns; How to Play is a multi-column grid. Short laptop viewports (<= 800px high) drop the shortcut box and tighten spacing. |
+| desktop, 1024px+ (content up to ~1440px, centred beyond) | table fills the viewport: a rounded felt table with opponents seated around it (1 = top, 2 = top-left/right, 3 = left/top/right, 4-5 around the oval), hand fanned along the bottom with Draw / JAKK / Play beside it, and a right-hand panel (game log / move-history tabs, house-rules chips, power-card cheat-sheet, room code + invite when in a friends room, collapsible shortcut list). Landing is a top-nav hero page; Play Friends shows Create and Join side by side; the lobby is two columns; How to Play is a multi-column grid. Short laptop viewports (<= 800px high) drop the shortcut box and tighten spacing. |
 
 ### Keyboard shortcuts (at the table)
 
@@ -127,9 +127,10 @@ Plain CSS media/container queries in `client/src/styles.css`, no libraries.
 |---|---|
 | `1`-`9`, `0` | focus and select/deselect the card at that position in your sorted hand |
 | `Left` / `Right` (also `Up`/`Down`, `Home`/`End`) | move focus between cards; `Enter` / `Space` selects the focused card |
+| `Backspace` | remove the last selected card from the sequence |
 | `P` (or `Enter` when no card is focused) | play the selection |
 | `D` | draw / pick up |
-| `J` | call JAKK, or arm it while playing your second-last card |
+| `J` | toggle JAKK: declare it when it is not your turn, or tick it to travel with your move on your own turn |
 | `Esc` | clear selection (or close a dialog) |
 | `?` | how to play |
 | `S` `H` `D` `C` or arrows + `Enter` | suit picker |
