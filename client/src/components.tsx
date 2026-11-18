@@ -26,7 +26,7 @@ export function cardName(c: Pick<Card, 'rank' | 'suit'>): string {
 export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: string; danger: boolean } | null {
   if (rules.skipRank !== null && c.rank === rules.skipRank) return { text: 'SKIP', danger: false };
   if (rules.reverseRank !== null && c.rank === rules.reverseRank) return { text: 'REV', danger: false };
-  if (rules.queenAcceptsAny && c.rank === 'Q') return { text: 'ANY', danger: false };
+  if (c.rank === 'Q') return { text: 'COVER', danger: false };
   switch (c.rank) {
     case '2':
       return { text: `+${rules.twoPenalty}`, danger: true };

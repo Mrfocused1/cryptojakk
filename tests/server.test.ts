@@ -5,7 +5,7 @@ import { getLegalCardIds, type PlayerView } from '../shared/engine';
 import type { RoomSnapshot, ServerMessage } from '../shared/protocol';
 import { createGameServer, type GameServer } from '../server/app';
 
-const FAST = { botMinMs: 5, botMaxMs: 10, jakkBotMinMs: 25, awayTurnMs: 150, sweepIntervalMs: 40, emptyRoomTtlMs: 200 };
+const FAST = { botMinMs: 5, botMaxMs: 10, awayTurnMs: 150, sweepIntervalMs: 40, emptyRoomTtlMs: 200 };
 const AVATAR = { emoji: '🦊', color: '#ff8800' };
 
 type Msg = ServerMessage;
@@ -87,12 +87,12 @@ class Client {
   }
 
   async hello(token: string, name = 'Tester') {
-    this.send({ type: 'hello', sessionToken: token, name, avatar: AVATAR, protocol: 1 });
+    this.send({ type: 'hello', sessionToken: token, name, avatar: AVATAR, protocol: 2 });
     return this.type('welcome');
   }
 
   private autoStep(v: PlayerView) {
-    if (v.winner) {
+    if (v.handOver) {
       this.autoDone?.(v);
       return;
     }
@@ -285,14 +285,29 @@ describe('server integration', () => {
     if (st.view.version === versionBefore) expect(st.view.hand.map((c) => c.id).sort()).toEqual(handBefore);
     await A.next((m) => m.type === 'roomState' && m.room.players.every((p) => p.connected));
 
-    // newcomer gets "game in progress"; unknown room; returning seat holder may rejoin via joinRoom
+    // a newcomer joins mid-hand as a waiting spectator: public info only, no hand, cannot act
     const C = await client(tok('C'), 'Cara');
     C.send({ type: 'joinRoom', code });
-    expect((await C.error('GAME_IN_PROGRESS')).message).toMatch(/in progress/i);
-    C.send({ type: 'joinRoom', code: 'ZZZZZ' });
-    await C.error('ROOM_NOT_FOUND');
-    C.send({ type: 'joinRoom', code: 'bad' });
-    await C.error('ROOM_NOT_FOUND');
+    const crs = await C.next<Extract<Msg, { type: 'roomState' }>>((m) => m.type === 'roomState');
+    expect(crs.room.players.find((p) => p.playerId === C.playerId)).toMatchObject({ waiting: true });
+    const cst = await C.type('state');
+    expect(cst.view).toMatchObject({ spectator: true, hand: [] });
+    expect(JSON.stringify(cst)).not.toContain(A.view!.hand[0].id + '","rank"');
+    C.clear();
+    C.send({ type: 'action', version: cst.view.version, action: { type: 'draw' } });
+    await C.error('NOT_YOUR_TURN');
+    // history is available to every seat (waiting ones too) and never carries hidden cards
+    C.clear();
+    C.send({ type: 'requestHistory' });
+    const hist = await C.type('history');
+    expect(hist.entries[0]).toMatchObject({ kind: 'deal', playerId: null });
+    for (const e of hist.entries.flatMap((x) => x.events)) if (e.type === 'drew') expect('cards' in e).toBe(false);
+    // unknown room; returning seat holder may rejoin via joinRoom
+    const D = await client(tok('D'), 'Dan');
+    D.send({ type: 'joinRoom', code: 'ZZZZZ' });
+    await D.error('ROOM_NOT_FOUND');
+    D.send({ type: 'joinRoom', code: 'bad' });
+    await D.error('ROOM_NOT_FOUND');
     B2.clear();
     B2.send({ type: 'joinRoom', code });
     await B2.type('state');
@@ -315,9 +330,9 @@ describe('server integration', () => {
     A.ws.on('message', (d) => {
       const m = JSON.parse(d.toString()) as Msg;
       if (m.type === 'state') {
-        if (m.events.some((e) => e.playerId === B.playerId && (e.type === 'played' || e.type === 'drew'))) sawBPlay = true;
+        if (m.events.some((e) => 'playerId' in e && e.playerId === B.playerId && (e.type === 'played' || e.type === 'drew'))) sawBPlay = true;
         const v = m.view;
-        if (!v.winner && v.turn === v.you) {
+        if (!v.handOver && v.turn === v.you) {
           const mv = chooseBotAction(v, { declareJakk: true });
           if (mv) A.send({ type: 'action', version: v.version, action: mv });
         }
@@ -340,13 +355,13 @@ describe('server integration', () => {
     expect(rs.room.players.filter((p) => p.isBot)).toHaveLength(2);
     await A.type('state');
     const final = await A.autoplay();
-    expect(final.winner).not.toBeNull();
-    await A.next((m) => m.type === 'roomState' && m.room.phase === 'finished');
+    expect(final.handOver).not.toBeNull();
+    await A.next((m) => m.type === 'roomState' && (m.room.phase === 'finished' || m.room.phase === 'handOver'));
     A.clear();
     (A as any).auto = false;
-    A.send({ type: 'rematch' });
+    A.send(final.winner ? { type: 'rematch' } : { type: 'nextHand' });
     const again = await A.type('state');
-    expect(again.view.winner).toBeNull();
+    expect(again.view.handOver).toBeNull();
     expect(again.view.version).toBe(0);
     // another player cannot join an AI room
     const X = await client(tok('X'), 'X');
@@ -366,9 +381,8 @@ describe('server integration', () => {
     expect(bot).toMatchObject({ ready: true, connected: true });
     H.send({ type: 'removeBot', playerId: bot.playerId });
     await H.next((m) => m.type === 'roomState' && m.room.players.length === 2);
-    H.send({ type: 'addBot' });
-    H.send({ type: 'addBot' });
-    await H.next((m) => m.type === 'roomState' && m.room.players.length === 4);
+    for (let i = 0; i < 4; i++) H.send({ type: 'addBot' });
+    await H.next((m) => m.type === 'roomState' && m.room.players.length === 6);
     H.send({ type: 'addBot' });
     await H.error('ROOM_FULL');
     const late = await client(tok('late' + Math.random().toString(36).slice(2)), 'Late');
@@ -388,14 +402,14 @@ describe('server integration', () => {
     P.send({ type: 'startGame' });
     await P.type('state');
     const final = await P.autoplay();
-    expect(final.winner).not.toBeNull();
-    await P.next((m) => m.type === 'roomState' && m.room.phase === 'finished');
+    expect(final.handOver).not.toBeNull();
+    await P.next((m) => m.type === 'roomState' && (m.room.phase === 'finished' || m.room.phase === 'handOver'));
     (P as any).auto = false;
-    P.send({ type: 'rematch' });
-    const rl = await P.next<Extract<Msg, { type: 'roomState' }>>((m) => m.type === 'roomState' && m.room.phase === 'rematch');
+    P.send(final.winner ? { type: 'rematch' } : { type: 'nextHand' });
+    const rl = await P.next<Extract<Msg, { type: 'roomState' }>>((m) => m.type === 'roomState' && (m.room.phase === 'rematch' || m.room.phase === 'playing'));
     expect(rl.room.code).toBe(code);
     expect(rl.room.players).toHaveLength(2);
-    P.send({ type: 'startGame' });
+    if (rl.room.phase === 'rematch') P.send({ type: 'startGame' });
     const again = await P.type('state');
     expect(again.view.version).toBe(0);
     // leaving mid-game empties the room (only human) -> it is gone
@@ -419,7 +433,7 @@ describe('server integration', () => {
     const rs = await H.next<Extract<Msg, { type: 'roomState' }>>((m) => m.type === 'roomState' && m.room.players.some((p) => p.isBot));
     expect(rs.room.players.find((p) => p.playerId === P.playerId)).toMatchObject({ isBot: true });
     const final = await H.autoplay();
-    expect(final.winner).not.toBeNull();
+    expect(final.handOver).not.toBeNull();
   });
 
   it('empty rooms are deleted after the TTL', async () => {
@@ -502,7 +516,7 @@ describe('hardening', () => {
       for (let i = 0; i < 14; i++) c.send({ type: 'ping', t: i }); // drain the bucket
       await c.error('RATE_LIMITED');
       const final = await c.autoplay(25_000);
-      expect(final.winner).not.toBeNull();
+      expect(final.handOver).not.toBeNull();
     } finally {
       await s.close();
     }

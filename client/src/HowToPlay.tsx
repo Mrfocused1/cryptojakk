@@ -60,8 +60,8 @@ export function HowToPlayContent() {
           <Row cards={['KS']} title="King: reverse">
             Play passes the other way round the table. With two players you simply go again. Two Kings played together cancel each other out.
           </Row>
-          <Row cards={['QD', 'QC']} title="Queen: anything goes">
-            Whatever the suit or rank, any card can be played on a Queen (unless a penalty is waiting). The Queen itself follows the normal rule.
+          <Row cards={['QD', 'QC']} title="Queen: cover it">
+            A Queen must be covered by the next card of the same turn. Leave one uncovered and you pick up {R.uncoveredQueenPenalty}. A Queen can never be your last card.
           </Row>
           <Row cards={['AS']} title="Ace: wild">
             Play it on anything (except a penalty) and name the suit that must be played next.
@@ -71,7 +71,7 @@ export function HowToPlayContent() {
       <section className="how-jakk">
         <h3 className="how-h">JAKK!</h3>
         <p>
-          When you are down to <b>one card</b>, you must say <b>JAKK</b>. Hit the JAKK button <b>before the next player moves</b>: arm it while you play your second-to-last card, or tap it right after. Forget, and you pick up <b>{R.jakkMissPenalty}</b>.
+          To go out you must have declared <b>JAKK</b> <b>before</b> the turn you finish on: tap JAKK while it is not your turn, or arm it together with your move. It covers your next turn only. Finish without it and your cards stay played but you pick up <b>{R.finishPenalty}</b>.
         </p>
       </section>
       <section className="how-pick">

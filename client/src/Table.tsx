@@ -173,7 +173,7 @@ export function Table() {
     setSuitOpen(false);
   }, [version]);
 
-  const winner = view?.winner ?? null;
+  const winner = view?.handOver ? (view.winner ?? 'none') : null;
   useEffect(() => {
     if (!winner) {
       setShowResults(false);
@@ -241,7 +241,7 @@ export function Table() {
   }
 
   const me = view.you;
-  const myTurn = view.turn === me && !view.winner;
+  const myTurn = view.turn === me && !view.handOver && !view.spectator;
   const legalSet = new Set(getLegalCardIds(view));
   const addableSet = new Set(getAddableCardIds(view, sel));
   const lit = sel.length ? addableSet : legalSet;
@@ -249,10 +249,11 @@ export function Table() {
   const turnPlayer = room.players.find((p) => p.playerId === view.turn);
 
   const handCount = view.hand.length;
-  const armable = view.rules.jakkEnabled && sel.length > 0 && handCount - sel.length === 1;
+  const declared = !!view.jakk[me];
+  const armable = view.rules.jakkEnabled && myTurn && !declared && handCount > 0;
   const jakkArmed = armed && armable;
-  const owed = view.jakkOwed === me;
-  const preview = sel.length ? previewPlay(view, sel, view.rules.aceWild ? 'S' : undefined) : null;
+  const owed = false;
+  const preview = sel.length ? previewPlay(view, sel, 'S') : null;
   const canPlay = myTurn && !!preview && preview.ok;
 
   const say = (text: string) => setHint({ id: Date.now(), text });
@@ -272,13 +273,17 @@ export function Table() {
       playSfx('pop');
       return;
     }
-    const r = previewPlay(view!, [...sel, card.id], view!.rules.aceWild ? 'S' : undefined);
+    const r = previewPlay(view!, [...sel, card.id], 'S');
     say(r.ok ? "You can't add that card" : r.reason);
     setShake({ id: card.id, n: Date.now() });
     setTimeout(() => setShake((s) => (s && s.id === card.id ? null : s)), 450);
   }
 
   function sendPlay(suit?: Suit) {
+    if (view!.awaitingSuit && suit) {
+      act({ type: 'chooseSuit', suit });
+      return;
+    }
     const ok = act({ type: 'play', cardIds: sel, ...(suit ? { suit } : {}), ...(jakkArmed ? { declareJakk: true } : {}) });
     if (ok) {
       setSuitOpen(false);
@@ -300,20 +305,22 @@ export function Table() {
   function onDraw() {
     unlockAudio();
     if (!myTurn) {
-      say(view!.winner ? 'The game is over' : 'Not your turn');
+      say(view!.handOver ? 'The hand is over' : 'Not your turn');
       return;
     }
-    act(view!.penalty ? { type: 'takePenalty' } : { type: 'draw' });
+    const flag = jakkArmed ? { declareJakk: true } : {};
+    act(view!.penalty ? { type: 'takePenalty', ...flag } : { type: 'draw', ...flag });
+    setArmed(false);
   }
 
   function onJakk() {
     unlockAudio();
-    if (owed) {
-      act({ type: 'declareJakk' });
+    if (declared) return;
+    if (!myTurn) {
+      act({ type: 'declareJakk' }); // before your turn: covers your next turn
       return;
     }
-    if (armable) setArmed((a) => !a);
-    else say(handCount <= 2 ? 'Select the card that leaves you on one card' : 'JAKK is for when you are down to one card');
+    if (armable) setArmed((a) => !a); // with your move: covers your next turn
   }
 
   // ---- hand geometry
@@ -360,7 +367,7 @@ export function Table() {
     return id ? sorted.findIndex((c) => c.id === id) : -1;
   };
   const playKey = () => {
-    if (!myTurn) say(view.winner ? 'The game is over' : 'Not your turn');
+    if (!myTurn) say(view.handOver ? 'The hand is over' : 'Not your turn');
     else if (!sel.length) say('Pick a card first: press 1-9 or use the arrow keys');
     else onPlay();
   };
@@ -449,10 +456,9 @@ export function Table() {
   const penalty = view.penalty;
   const shownSuit = suitOverride ?? view.activeSuit;
   const suitRed = shownSuit === 'H' || shownSuit === 'D';
-  const anyOnQueen = view.rules.queenAcceptsAny && top.rank === 'Q' && !penalty;
 
   let turnLabel: ReactElement;
-  if (view.winner) turnLabel = <div className="turnlabel">Game over</div>;
+  if (view.handOver) turnLabel = <div className="turnlabel">Hand over</div>;
   else if (myTurn) {
     turnLabel = (
       <div className="turnlabel mine" data-testid="turn-label">
@@ -483,7 +489,7 @@ export function Table() {
     { id: 'JH', title: 'Red Jack', text: 'Cancels a penalty', full: 'Played on a Jack penalty it cancels the whole thing.' },
     { id: '8D', title: '8', text: 'Skip next player', full: 'The next player misses their turn (two 8s skip two players).' },
     { id: 'KS', title: 'King', text: 'Reverse direction', full: 'Play passes the other way round the table.' },
-    { id: 'QD', title: 'Queen', text: 'Anything goes on it', full: 'Any card can be played on a Queen (unless a penalty is waiting).' },
+    { id: 'QD', title: 'Queen', text: 'Must be covered', full: 'Cover a Queen with the next card of the same turn. An uncovered Queen costs a card and can never be your last card.' },
     { id: 'AS', title: 'Ace', text: 'Wild: name a suit', full: 'Play it on anything (except a penalty) and name the next suit.' },
   ];
 
@@ -516,7 +522,7 @@ export function Table() {
       <div className="stage">
         <section className="seats" aria-label="Opponents" data-n={others.length}>
           {others.map((p, i) => (
-            <Seat key={p.playerId} player={p} slot={slots[i]} count={view.handCounts[p.playerId] ?? 0} active={view.turn === p.playerId && !view.winner} jakk={(view.handCounts[p.playerId] ?? 0) === 1} dealing={dealing} />
+            <Seat key={p.playerId} player={p} slot={slots[i]} count={view.handCounts[p.playerId] ?? 0} active={view.turn === p.playerId && !view.handOver} jakk={!!view.jakk[p.playerId]} dealing={dealing} />
           ))}
         </section>
 
@@ -536,10 +542,10 @@ export function Table() {
               <CardBack className="p1" />
               <span className="pile-count">{view.drawCount}</span>
             </button>
-            <div className="suit-chip" data-testid="active-suit" data-suit={shownSuit} data-any={anyOnQueen ? 'true' : 'false'} aria-label={anyOnQueen ? 'Any card can be played on the Queen' : `Active suit: ${SUIT_NAME[shownSuit]}`}>
-              <span className="suit-cap">{anyOnQueen ? 'QUEEN' : 'SUIT'}</span>
-              <span className={`suit-box ${anyOnQueen ? 'any' : suitRed ? 'red' : 'black'}`} key={anyOnQueen ? 'any' : shownSuit}>
-                {anyOnQueen ? 'ANY' : <SuitIcon suit={shownSuit} />}
+            <div className="suit-chip" data-testid="active-suit" data-suit={shownSuit} aria-label={`Active suit: ${SUIT_NAME[shownSuit]}`}>
+              <span className="suit-cap">SUIT</span>
+              <span className={`suit-box ${suitRed ? 'red' : 'black'}`} key={shownSuit}>
+                <SuitIcon suit={shownSuit} />
               </span>
             </div>
             <div className="pile discard" data-anchor="discard" data-testid="discard-pile" aria-label={`Top card: ${cardName(top)}`}>
@@ -612,14 +618,14 @@ export function Table() {
           <button
             className={`pill danger jakk-btn ${owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : ''}`}
             data-testid="jakk-btn"
-            data-state={owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : 'idle'}
+            data-state={declared ? 'armed' : jakkArmed ? 'armed' : armable ? 'armable' : 'idle'}
             onClick={onJakk}
-            disabled={!view.rules.jakkEnabled || (!owed && !armable && !(myTurn && handCount <= 3))}
+            disabled={!view.rules.jakkEnabled || declared || view.handOver !== null || view.spectator}
             aria-pressed={jakkArmed}
             aria-keyshortcuts="J"
-            aria-label={owed ? 'Declare JAKK now' : jakkArmed ? 'JAKK armed. Tap to cancel' : 'JAKK'}
+            aria-label={declared ? 'JAKK declared for your next turn' : jakkArmed ? 'JAKK armed. Tap to cancel' : 'JAKK'}
           >
-            {jakkArmed ? 'JAKK ✓' : 'JAKK'}
+            {declared || jakkArmed ? 'JAKK ✓' : 'JAKK'}
             <Kbd k="J" />
           </button>
           <button className="pill primary play-btn" data-testid="play-btn" onClick={onPlay} disabled={!canPlay} aria-keyshortcuts="P">
@@ -672,7 +678,7 @@ export function Table() {
 
       <FlightLayer />
 
-      <Sheet open={suitOpen} onClose={() => setSuitOpen(false)} title="Choose a suit">
+      <Sheet open={suitOpen || (view.awaitingSuit && myTurn)} onClose={() => setSuitOpen(false)} title="Choose a suit">
         <div className="suit-grid" data-testid="suit-picker">
           {SUITS.map((s) => (
             <button key={s} className={`suit-btn ${s === 'H' || s === 'D' ? 'red' : 'black'} ${SUITS[suitHl] === s ? 'hl' : ''}`} onClick={() => sendPlay(s)} aria-label={SUIT_NAME[s]} data-suit={s}>
@@ -706,7 +712,9 @@ export function Table() {
 }
 
 function defaultFeed(view: PlayerView, nameOf: (id: string) => string): string {
-  if (view.winner) return `${view.winner === view.you ? 'You' : nameOf(view.winner)} won the game`;
+  if (view.handOver) return view.winner ? `${view.winner === view.you ? 'You' : nameOf(view.winner)} won the hand` : 'The hand ended with no winner';
+  if (view.spectator) return 'You are watching - you are dealt in next hand';
+  if (view.awaitingSuit && view.turn === view.you) return 'Name a suit for the opening Ace';
   if (view.turn === view.you) return view.penalty ? penaltyReason(view.penalty, view.rules) : 'Play a card or draw';
   return `${nameOf(view.turn)} is on the move`;
 }

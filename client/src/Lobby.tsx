@@ -176,7 +176,7 @@ export function Lobby() {
           </div>
 
           <p className="rules-line">
-            {room.minPlayers}-{room.maxPlayers} players. Match suit or rank, empty your hand first. 2 = +2, black Jack = +5, 8 skips, King reverses, anything goes on a Queen, Ace is wild. Say JAKK on one card.
+            {room.minPlayers}-{room.maxPlayers} players. Match suit or rank, empty your hand first. 2 = +2, black Jack = +5, 8 skips, King reverses, Queens need a cover, Ace is wild. Say JAKK on one card.
           </p>
           <ul className="rules-list" aria-label="Rules summary">
             <li>
@@ -192,7 +192,7 @@ export function Lobby() {
               <b>8 / King</b> 8 skips the next player, King reverses direction.
             </li>
             <li>
-              <b>Queen</b> Anything can be played on a Queen.
+              <b>Queen</b> Must be covered in the same turn.
             </li>
             <li>
               <b>Ace</b> Wild: name the next suit.

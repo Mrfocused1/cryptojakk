@@ -6,7 +6,7 @@ import { Room, type Profile } from '../server/room';
 import { scenario, seededRng } from './helpers';
 
 // Deterministic coverage of "who plays next?" scheduling in Room: no sockets, fake timers.
-const TIMING: Timing = { ...DEFAULT_TIMING, botMinMs: 10, botMaxMs: 10, jakkBotMinMs: 50, awayTurnMs: 100 };
+const TIMING: Timing = { ...DEFAULT_TIMING, botMinMs: 10, botMaxMs: 10, awayTurnMs: 100 };
 const AV = { emoji: '🦊', color: '#fff' };
 const prof = (id: string): Profile => ({ playerId: id, name: id, avatar: AV });
 
@@ -55,23 +55,12 @@ describe('Room scheduling after seat changes', () => {
     expect(room.state!.version).toBeGreaterThan(v);
   });
 
-  it('leaving while a JAKK call is owed by the leaver: the bot still plays', () => {
+  it('leaving while holding a JAKK declaration: the bot still plays', () => {
     const { room } = makeRoom();
     room.start('H');
-    setState(room, { hands: { H: HAND_H, P: ['9D'] }, top: '9H', turn: 'P', jakkOwed: 'P' });
-    room.leave('P');
-    vi.advanceTimersByTime(TIMING.jakkBotMinMs + TIMING.botMaxMs + 1);
-    expect(room.state!.version).toBeGreaterThan(0);
-  });
-
-  it('leaving while a JAKK call is owed to the remaining human: bot waits, then plays (no stall)', () => {
-    const { room } = makeRoom();
-    room.start('H');
-    setState(room, { hands: { H: ['KD'], P: HAND_P }, top: '9H', turn: 'P', jakkOwed: 'H' });
+    setState(room, { hands: { H: HAND_H, P: ['9D'] }, top: '9H', turn: 'P', jakk: ['P'] });
     room.leave('P');
     vi.advanceTimersByTime(TIMING.botMaxMs + 1);
-    expect(room.state!.version).toBe(0); // still giving the human time to declare
-    vi.advanceTimersByTime(TIMING.jakkBotMinMs);
     expect(room.state!.version).toBeGreaterThan(0);
   });
 
@@ -181,7 +170,7 @@ describe('Room scheduling after seat changes', () => {
     room.leave('P');
     room.setConnected('H', false);
     vi.advanceTimersByTime(10 * 60_000);
-    expect(room.state!.winner).not.toBeNull();
-    expect(room.phase).toBe('finished');
+    expect(room.state!.handOver).not.toBeNull();
+    expect(['finished', 'handOver']).toContain(room.phase);
   });
 });

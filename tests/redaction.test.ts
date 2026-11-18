@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chooseBotAction } from '../shared/ai';
-import { DEFAULT_RULES, applyAction, createGame, redactEvents, toPlayerView, type GameEvent, type GameState } from '../shared/engine';
+import { DEFAULT_RULES, applyAction, createGame, publicEvents, redactEvents, toPlayerView, type GameEvent, type GameState } from '../shared/engine';
 import { seededRng } from './helpers';
 
 function quoted(id: string) {
@@ -12,8 +12,8 @@ describe('view / event redaction', () => {
     const rng = seededRng(5);
     for (let g = 0; g < 30; g++) {
       let s: GameState = createGame(['A', 'B', 'C'], DEFAULT_RULES, rng);
-      for (let step = 0; step < 60 && !s.winner; step++) {
-        for (const me of s.players) {
+      for (let step = 0; step < 60 && !s.handOver; step++) {
+        for (const me of [...s.players, 'watcher']) {
           const view = toPlayerView(s, me);
           const json = JSON.stringify(view);
           const hidden = [
@@ -27,8 +27,13 @@ describe('view / event redaction', () => {
           }
           expect(Object.keys(view)).not.toContain('hands');
           expect(Object.keys(view)).not.toContain('drawPile');
-          expect(view.hand.map((c) => c.id).sort()).toEqual(s.hands[me].map((c) => c.id).sort());
-          expect(view.handCounts[me]).toBe(s.hands[me].length);
+          if (me === 'watcher') {
+            expect(view.spectator).toBe(true);
+            expect(view.hand).toEqual([]);
+          } else {
+            expect(view.hand.map((c) => c.id).sort()).toEqual(s.hands[me].map((c) => c.id).sort());
+            expect(view.handCounts[me]).toBe(s.hands[me].length);
+          }
         }
         const pid = s.players[s.turn];
         const move = chooseBotAction(toPlayerView(s, pid), { declareJakk: rng() < 0.5 })!;
@@ -36,7 +41,7 @@ describe('view / event redaction', () => {
         if (!r.ok) throw new Error(r.reason);
 
         // events redacted for each viewer
-        for (const me of s.players) {
+        for (const me of [...s.players, 'watcher']) {
           const events: GameEvent[] = redactEvents(r.events, me);
           const json = JSON.stringify(events) + JSON.stringify(toPlayerView(r.state, me));
           const publiclyPlayed = new Set(r.events.flatMap((e) => (e.type === 'played' ? e.cards.map((c) => c.id) : [])));
@@ -50,6 +55,8 @@ describe('view / event redaction', () => {
             if (e.type === 'drew' && e.playerId === me) expect(e.cards).toHaveLength(e.count);
           }
         }
+        // the public history form never carries a drawer's cards
+        for (const e of publicEvents(r.events)) if (e.type === 'drew') expect('cards' in e).toBe(false);
         s = r.state;
       }
     }

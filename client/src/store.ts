@@ -1,6 +1,6 @@
 // Single connection + state module. React reads it through useApp()/useSel(); components call the exported actions.
 import { useSyncExternalStore } from 'react';
-import type { Card, PlayerAction, PlayerView } from '@shared/engine';
+import type { Card, PlayerAction, PlayerView, Suit } from '@shared/engine';
 import {
   type Avatar,
   type ClientMessage,
@@ -11,7 +11,7 @@ import {
   normalizeRoomCode,
 } from '@shared/protocol';
 import { LocalGame } from '@shared/local';
-import type { RoomSave } from '@shared/room';
+import { type RoomSave, isCompatibleSave } from '@shared/room';
 import { cancelFx, planEvents } from './fx';
 import { type Identity, getToken, loadIdentity, randomGuest, saveIdentity } from './identity';
 import { navigate } from './router';
@@ -406,8 +406,8 @@ function handle(msg: ServerMessage): void {
 }
 
 function noteTurn(prev: PlayerView | null, view: PlayerView, resync: boolean): void {
-  const mine = view.turn === view.you && !view.winner;
-  const wasMine = prev ? prev.turn === prev.you && !prev.winner : false;
+  const mine = view.turn === view.you && !view.handOver;
+  const wasMine = prev ? prev.turn === prev.you && !prev.handOver : false;
   if (mine && !wasMine && !resync) {
     vibrate(40);
     setTimeout(() => playSfx('turn'), 380);
@@ -418,7 +418,7 @@ function handleError(code: ErrorCode, message: string, reqId?: string): void {
   busyVersion = -1;
   switch (code) {
     case 'STALE_VERSION':
-    case 'JAKK_NOT_NEEDED':
+    case 'JAKK_ALREADY_DECLARED':
     case 'NOT_YOUR_TURN':
       return; // normal races; the corrected state follows
     case 'ROOM_NOT_FOUND':
@@ -446,7 +446,7 @@ let busyTimer: ReturnType<typeof setTimeout> | undefined;
 /** Send a game action against the current view version. Ignores double taps on the same version. */
 export function act(action: PlayerAction): boolean {
   const view = state.view;
-  if (!view || view.winner) return false;
+  if (!view || view.handOver || view.spectator) return false;
   if (busyVersion === view.version && action.type !== 'declareJakk') return false;
   const ok = send({ type: 'action', version: view.version, action, reqId: `a${++reqCounter}` });
   if (!ok) {
@@ -524,7 +524,7 @@ function loadLocalSave(): RoomSave | null {
     const o = JSON.parse(raw) as { at?: number; save?: RoomSave };
     const sv = o.save;
     if (!sv || typeof o.at !== 'number' || Date.now() - o.at > LOCAL_SAVE_MAX_AGE_MS) throw new Error('stale');
-    if (sv.mode !== 'ai' || !Array.isArray(sv.seats) || sv.seats.length < 2 || (sv.phase !== 'playing' && sv.phase !== 'finished') || !sv.state) throw new Error('bad');
+    if (sv.mode !== 'ai' || !Array.isArray(sv.seats) || sv.seats.length < 2 || (sv.phase !== 'playing' && sv.phase !== 'handOver' && sv.phase !== 'finished') || !sv.state || !isCompatibleSave(sv)) throw new Error('bad');
     return sv;
   } catch {
     removeStore(LOCAL_SAVE_KEY);
@@ -574,6 +574,9 @@ export function removeBot(playerId: string): void {
 }
 export function startGame(): void {
   send({ type: 'startGame' });
+}
+export function nextHand(): void {
+  send({ type: 'nextHand' });
 }
 export function rematch(): void {
   if (send({ type: 'rematch' })) patch({ rematchRequested: true });

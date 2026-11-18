@@ -4,8 +4,8 @@ Browser card game (phone, tablet and desktop): UK-style Blackjack (the card-**sh
 The repo contains a pure rules engine, the shared protocol/types, a bot AI, a Node WebSocket server and the React client
 (`client/`, responsive phone / tablet / desktop, see "Client" below).
 
-* Rules (PROVISIONAL, all toggles in `RulesConfig`): [`docs/RULEBOOK.md`](docs/RULEBOOK.md)
-* Wire protocol (read this first if you are building the client): [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
+* Rules (the owner's 2026-11-18 rulebook as implemented: 2-6 players, sequences, 8 skips / King reverses / 7 ordinary, Queen cover, JAKK declared before the finishing turn, host house rules, matches, turn timer; all toggles in `RulesConfig`): [`docs/RULEBOOK.md`](docs/RULEBOOK.md). Source text: [`docs/source/owner-rules-2026-11-18.md`](docs/source/owner-rules-2026-11-18.md)
+* Wire protocol v2 (read this first if you are building the client, including its "Changes since v1" section): [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
 
 ## Setup
 
@@ -59,8 +59,8 @@ docs/                RULEBOOK.md, PROTOCOL.md
   (never throws on player input, never mutates its input), `toPlayerView`, `getLegalCardIds(view)`, `getAddableCardIds(view, selection)`,
   `previewPlay(view, ids, suit)`. The client uses the same helpers to highlight cards.
 * **Randomness.** The engine takes an `rng: () => number`. The server injects a `crypto.randomInt`-based generator (48-bit) used by the
-  Fisher-Yates shuffle; tests inject a seeded PRNG. Bot think-time and the bot "forgot JAKK" roll (10%) also come from the server.
-* **Bots / away players.** Bots move 900-1600 ms after their turn starts (>= 3000 ms while a human owes a JAKK call). If a disconnected
+  Fisher-Yates shuffle; tests inject a seeded PRNG. Bot think-time and the bot JAKK-declaration roll (90%) also come from the server.
+* **Bots / away players.** Bots move 900-1600 ms after their turn starts. If a disconnected
   human's turn lasts 15 s, the bot logic plays it (repeating each turn). Mid-game `leave` converts the seat to a bot. All timings are in
   `server/config.ts` and overridable in tests.
 * **Housekeeping.** Rooms with no connected human for 5 min or idle 30 min are deleted (swept every 30 s). Room cap 2000. Heartbeat
@@ -88,9 +88,9 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
   uses the saved identity or generates a "Guest 1234" one. Sound mute is `cj.muted`.
 * **Solo games run in the browser.** "Play Now" and "Play AI" create a `LocalGame` (`shared/local.ts`) that accepts the same client
   messages and emits the same `roomState` / `state` (redacted view + events) / `error` messages as the server, driving the same `Room`,
-  engine and bot AI (bot pacing 900-1600 ms, >= 3000 ms when you owe a JAKK call, ~90% bot JAKK rate; shuffle uses
+  engine and bot AI (bot pacing 900-1600 ms, ~90% bot JAKK rate; shuffle uses
   `crypto.getRandomValues`). No WebSocket is opened, so solo works offline and on static hosting. The in-progress game is saved in
-  `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it. A save made under older rules (e.g. when 8 reversed and 7 skipped) is restored with the current rules; an unreadable save is discarded.
+  `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it. Saves are versioned (`RoomSave.v`, currently 2): a save made by an older version of the game (other rules / shape) or an unreadable one is discarded cleanly on load (`isCompatibleSave`), never half-restored.
 * **Multiplayer connects lazily.** The socket opens only for Play Friends, a `/r/CODE` link, or a stored friends-room session
   (`cj.friendsRoom`). If the very first connection fails or takes > 7 s, the friends screens show "Multiplayer is offline right now"
   with Retry and "Play vs AI instead" instead of a reconnect loop. Endpoint: `VITE_WS_URL` or same-origin `/ws`.
@@ -165,9 +165,9 @@ Unknown GET paths without a file extension fall back to `index.html` so `/r/CODE
 * **Single instance.** Rooms live in one process; there is no cross-instance routing or shared state. Do not scale horizontally
   without sticky routing by room code (and even then a restart loses rooms).
 * Identity is a client-held secret token: no accounts, no recovery if the browser storage is cleared.
-* The rules are provisional (`docs/RULEBOOK.md`); the server always uses `DEFAULT_RULES` (not per-room configurable yet).
+* The rules follow the owner's rulebook (`docs/RULEBOOK.md`); the server starts from `DEFAULT_RULES` plus the host's house rules (`setOptions`), validated server-side.
 * A stalemate (nobody can move and no cards exist anywhere) is theoretically possible only in absurd configurations; with the
-  default rules and 2-4 players 500-game simulations per size always finish.
+  default rules and 2-6 players, 300-hand simulations per size (and 100 per size with every house rule flipped) always finish; a hand that cannot finish ends with no winner (turn cap / deck exhaustion).
 
 ## Third-party libraries
 

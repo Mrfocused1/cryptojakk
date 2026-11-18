@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chooseBotAction } from '../shared/ai';
-import { type GameState, DEFAULT_RULES, redactEvents, toPlayerView } from '../shared/engine';
+import { type GameState, redactEvents, toPlayerView } from '../shared/engine';
 import { LOCAL_PLAYER_ID, LocalGame } from '../shared/local';
 import type { ServerMessage } from '../shared/protocol';
-import { type Room, type RoomSave } from '../shared/room';
+import { type Room, type RoomSave, isCompatibleSave } from '../shared/room';
 import { cryptoInt, cryptoRng } from '../shared/rng';
 import { scenario, seededRng } from './helpers';
 
@@ -53,7 +53,7 @@ describe('LocalGame (in-browser solo driver)', () => {
       const { game, msgs, room, lastView } = makeGame({ rng: seededRng(40 + bots) });
       game.handle({ type: 'createRoom', mode: 'ai', botCount: bots });
       let guard = 0;
-      while (!lastView()!.view.winner && guard++ < 4000) {
+      while (!lastView()!.view.handOver && guard++ < 4000) {
         vi.advanceTimersByTime(400);
         const v = lastView()!.view;
         const stNow = room()!.state as GameState;
@@ -61,15 +61,15 @@ describe('LocalGame (in-browser solo driver)', () => {
         const hidden = [...stNow.players.filter((p) => p !== LOCAL_PLAYER_ID).flatMap((p) => stNow.hands[p]), ...stNow.drawPile].map((c) => c.id).filter((id) => id !== topId);
         const json = JSON.stringify(lastView());
         for (const id of hidden) expect(json.includes(`"${id}"`), `leak of ${id}`).toBe(false);
-        if (v.winner) break;
+        if (v.handOver) break;
         if (v.turn === v.you) {
           const move = chooseBotAction(v, { declareJakk: true })!;
           game.handle({ type: 'action', version: v.version, action: move });
         }
       }
       const final = lastView()!.view;
-      expect(final.winner, `game with ${bots} bots finished`).toBeTruthy();
-      expect(room()!.phase).toBe('finished');
+      expect(final.handOver, `game with ${bots} bots finished`).toBeTruthy();
+      expect(['finished', 'handOver']).toContain(room()!.phase);
 
       // every state message equals what the server would send for that player: toPlayerView + redactEvents, no foreign cards
       const st = room()!.state as GameState;
@@ -93,12 +93,11 @@ describe('LocalGame (in-browser solo driver)', () => {
     }
   });
 
-  it('bot pacing matches the server: 900-1600 ms, and >= 3000 ms while the human owes JAKK', () => {
-    const { game, room, lastView, msgs } = makeGame();
+  it('bot pacing matches the server: 900-1600 ms per move, with no extra wait tied to the human\'s JAKK', () => {
+    const { game, room, lastView } = makeGame();
     game.handle({ type: 'createRoom', mode: 'ai', botCount: 1 });
     const bot = room()!.seats.find((s) => s.isBot)!.playerId;
-    const hand = ['3H', '4S'];
-    room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: hand, [bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: bot });
+    room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H', '4S', '3C'], [bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: bot });
     room()!.resume();
     const v0 = room()!.state!.version;
     vi.advanceTimersByTime(899);
@@ -106,47 +105,30 @@ describe('LocalGame (in-browser solo driver)', () => {
     vi.advanceTimersByTime(1600 - 899 + 1);
     expect(room()!.state!.version).toBeGreaterThan(v0); // by 1600 it has moved
     expect(lastView()!.events.length).toBeGreaterThan(0);
-
-    // human to move with 2 cards, plays down to one WITHOUT declaring JAKK
-    const { game: g2, room: room2, msgs: msgs2 } = makeGame();
-    g2.handle({ type: 'createRoom', mode: 'ai', botCount: 1 });
-    const bot2 = room2()!.seats.find((s) => s.isBot)!.playerId;
-    room2()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H', '4S'], [bot2]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: LOCAL_PLAYER_ID });
-    g2.handle({ type: 'action', version: 0, action: { type: 'play', cardIds: ['3H'] } });
-    expect(room2()!.state!.jakkOwed).toBe(LOCAL_PLAYER_ID);
-    const v1 = room2()!.state!.version;
-    vi.advanceTimersByTime(2999);
-    expect(room2()!.state!.version).toBe(v1); // bot waits the full JAKK window
-    vi.advanceTimersByTime(2);
-    expect(room2()!.state!.version).toBeGreaterThan(v1);
-    void msgs; void msgs2;
   });
 
-  it('JAKK miss: the forgetful human draws the miss penalty on the next applied action', () => {
-    const { game, room, msgs } = makeGame();
-    game.handle({ type: 'createRoom', mode: 'ai', botCount: 1 });
-    const bot = room()!.seats.find((s) => s.isBot)!.playerId;
-    room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H', '4S'], [bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: LOCAL_PLAYER_ID });
-    msgs.length = 0;
-    game.handle({ type: 'action', version: 0, action: { type: 'play', cardIds: ['3H'] } });
-    expect(room()!.state!.hands[LOCAL_PLAYER_ID]).toHaveLength(1);
-    vi.advanceTimersByTime(3001); // bot acts -> miss applies first
-    const hand = room()!.state!.hands[LOCAL_PLAYER_ID];
-    expect(hand).toHaveLength(1 + DEFAULT_RULES.jakkMissPenalty);
-    const events = msgs.flatMap((m) => (m.type === 'state' ? m.events : []));
-    expect(events.some((e) => e.type === 'jakkMissed' && e.playerId === LOCAL_PLAYER_ID)).toBe(true);
-    expect(room()!.state!.jakkOwed).toBeNull();
-  });
-
-  it('declaring JAKK in time avoids the penalty (and the declare is accepted)', () => {
-    const { game, room } = makeGame();
-    game.handle({ type: 'createRoom', mode: 'ai', botCount: 1 });
-    const bot = room()!.seats.find((s) => s.isBot)!.playerId;
-    room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H', '4S'], [bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: LOCAL_PLAYER_ID });
-    game.handle({ type: 'action', version: 0, action: { type: 'play', cardIds: ['3H'], declareJakk: true } });
-    expect(room()!.state!.jakkOwed).toBeNull();
-    vi.advanceTimersByTime(2000);
-    expect(room()!.state!.hands[LOCAL_PLAYER_ID]).toHaveLength(1);
+  it('JAKK model: finishing without a declaration costs a card; declaring before the turn (standalone, or with the previous move) wins', () => {
+    const mk = () => {
+      const g = makeGame();
+      g.game.handle({ type: 'createRoom', mode: 'ai', botCount: 1 });
+      const bot = g.room()!.seats.find((s) => s.isBot)!.playerId;
+      return { ...g, bot };
+    };
+    // no declaration: the last card is played but the human stays in with 1 drawn card
+    const a = mk();
+    a.room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H'], [a.bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: LOCAL_PLAYER_ID });
+    a.game.handle({ type: 'action', version: 0, action: { type: 'play', cardIds: ['3H'] } });
+    expect(a.room()!.state!.winner).toBeNull();
+    expect(a.room()!.state!.hands[LOCAL_PLAYER_ID]).toHaveLength(1);
+    // declared off-turn with the standalone action: then the finishing move wins
+    const b = mk();
+    b.room()!.state = scenario({ hands: { [LOCAL_PLAYER_ID]: ['3H'], [b.bot]: ['5D', '6C', 'KS', 'QS'] }, top: '9H', turn: b.bot });
+    b.game.handle({ type: 'action', version: 0, action: { type: 'declareJakk' } });
+    expect(b.room()!.state!.jakk[LOCAL_PLAYER_ID]).toBe(true);
+    b.room()!.state = { ...b.room()!.state!, turn: 0 };
+    b.game.handle({ type: 'action', version: b.room()!.state!.version, action: { type: 'play', cardIds: ['3H'] } });
+    expect(b.room()!.state!.winner).toBe(LOCAL_PLAYER_ID);
+    expect(b.room()!.phase).toBe('finished');
   });
 
   it('stale versions and wrong turns come back as typed errors with a resync view', () => {
@@ -176,12 +158,12 @@ describe('LocalGame (in-browser solo driver)', () => {
     expect(b.lastView()!.view.version).toBe(roundTrip.state!.version);
     // finish the game from the restored state
     let guard = 0;
-    while (!b.lastView()!.view.winner && guard++ < 4000) {
+    while (!b.lastView()!.view.handOver && guard++ < 4000) {
       vi.advanceTimersByTime(400);
       const v = b.lastView()!.view;
-      if (!v.winner && v.turn === v.you) b.game.handle({ type: 'action', version: v.version, action: chooseBotAction(v, { declareJakk: true })! });
+      if (!v.handOver && v.turn === v.you) b.game.handle({ type: 'action', version: v.version, action: chooseBotAction(v, { declareJakk: true })! });
     }
-    expect(b.lastView()!.view.winner).toBeTruthy();
+    expect(b.lastView()!.view.handOver).toBeTruthy();
     b.msgs.length = 0;
     b.game.handle({ type: 'rematch' });
     expect(b.room()!.phase).toBe('playing');
@@ -194,25 +176,29 @@ describe('LocalGame (in-browser solo driver)', () => {
     expect(b.game.active).toBe(false);
   });
 
-  it('restores a save made under the old rules (8 reverses, 7 skips) with the current rules instead of crashing', () => {
+  it('a save from an older version of the game (old rules, no version) is refused cleanly, never half-restored', () => {
     const a = makeGame({ rng: seededRng(9) });
     a.game.handle({ type: 'createRoom', mode: 'ai', botCount: 2 });
-    const save = JSON.parse(JSON.stringify(a.room()!.save())) as RoomSave;
+    const save = JSON.parse(JSON.stringify(a.room()!.save())) as Record<string, any>;
     a.game.close();
-    // rewrite the embedded rules into the legacy shape
-    const { skipRank: _s, reverseRank: _r, ...rest } = save.state!.rules as unknown as Record<string, unknown>;
-    save.state!.rules = { ...rest, eightReverses: true, sevenSkips: true, powerRanks: ['2', '7', '8', 'J', 'A'] } as never;
+    expect(isCompatibleSave(save)).toBe(true);
 
+    // the previous release: no `v`, legacy rules shape
+    const legacy = JSON.parse(JSON.stringify(save));
+    delete legacy.v;
+    const { skipRank: _s, reverseRank: _r, flexibleQueenCover: _f, ...rest } = legacy.state.rules;
+    legacy.state.rules = { ...rest, eightReverses: true, sevenSkips: true, powerRanks: ['2', '7', '8', 'J', 'A'] };
+    expect(isCompatibleSave(legacy)).toBe(false);
     const b = makeGame({ rng: seededRng(10) });
-    b.game.restore(save);
-    const st = b.room()!.state as GameState;
-    expect(st.rules.skipRank).toBe('8');
-    expect(st.rules.reverseRank).toBe('K');
-    expect(st.rules.powerRanks).toContain('K');
-    expect(st.rules.powerRanks).not.toContain('7');
-    expect(st.hands).toEqual(save.state!.hands); // the game itself is untouched
-    expect(b.lastView()!.view.rules.skipRank).toBe('8');
-    b.game.close();
+    expect(() => b.game.restore(legacy as RoomSave)).toThrow(/Incompatible/);
+    expect(b.game.active).toBe(false);
+
+    // right version number but old rules inside
+    const half = JSON.parse(JSON.stringify(save));
+    half.state.rules = legacy.state.rules;
+    expect(isCompatibleSave(half)).toBe(false);
+    expect(isCompatibleSave(null)).toBe(false);
+    expect(isCompatibleSave({ v: 2 })).toBe(false);
   });
 
   it('refuses non-solo requests instead of pretending to host friends rooms', () => {

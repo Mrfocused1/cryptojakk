@@ -1,6 +1,6 @@
 // Turns the server's `events` into a short, ordered presentation queue: feed line, centre-stage callout,
 // card flights and sounds. Purely cosmetic: the authoritative `view` is already rendered when this runs.
-import { type Card, type GameEvent, type PlayerView, SUIT_SYMBOL, isRedSuit } from '@shared/engine';
+import { type Card, type GameEvent, type PlayerView, type Suit, SUIT_SYMBOL, isRedSuit } from '@shared/engine';
 import type { RoomSnapshot } from '@shared/protocol';
 import { playSfx, type Sfx } from './sound';
 import { isReduced } from './prefs';
@@ -115,10 +115,6 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
           } else break;
         }
         i = j - 1;
-        if (e.cards[e.cards.length - 1].rank === 'Q' && view.rules.queenAcceptsAny) {
-          bits.push('play anything');
-          setCallout({ text: 'ANY CARD', kind: 'info' });
-        }
         const flights: Flight[] = [];
         const to = discardRect;
         const seat = actor === me ? null : rectOf(`[data-anchor="seat-${actor}"]`);
@@ -139,20 +135,18 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
         });
         break;
       }
-      case 'jakkMissed': {
-        const next = events[i + 1];
-        const count = next && next.type === 'drew' && next.reason === 'jakkMiss' ? next.count : view.rules.jakkMissPenalty;
-        if (next && next.type === 'drew' && next.reason === 'jakkMiss') i++;
-        steps.push({
-          text: `${nameOf(e.playerId)} forgot to call JAKK: +${count}`,
-          callout: { text: 'MISSED JAKK', kind: 'danger' },
-          flights: flightsDraw(e.playerId, count),
-          sfx: 'alert',
-          dur: STEP + 120,
-        });
+      case 'finishBlocked':
+        steps.push({ text: `${nameOf(e.playerId)}: ${e.message} (+${e.count})`, callout: { text: 'NOT OUT', kind: 'danger' }, flights: flightsDraw(e.playerId, e.count), sfx: 'alert', dur: STEP + 120 });
         break;
-      }
+      case 'queenUncovered':
+        if (!events.some((x) => x.type === 'finishBlocked' && x.playerId === e.playerId)) {
+          steps.push({ text: `${nameOf(e.playerId)} left a Queen uncovered (+${e.count})`, callout: { text: 'UNCOVERED', kind: 'danger' }, flights: flightsDraw(e.playerId, e.count), sfx: 'alert', dur: STEP + 120 });
+        }
+        break;
+      case 'jakkExpired':
+        break;
       case 'drew': {
+        if (e.reason === 'queenPenalty' || e.reason === 'finishPenalty') break; // shown with its own step
         const penalty = e.reason === 'penalty';
         const text = e.count === 1 && !penalty ? `${nameOf(e.playerId)} ${verb(e.playerId, 'draw', 'draws')} a card` : `${nameOf(e.playerId)} ${verb(e.playerId, 'pick up', 'picks up')} ${e.count}`;
         steps.push({
@@ -185,7 +179,7 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
       if (e.type === 'drew' && e.playerId === me && e.cards) {
         for (const c of e.cards) freshDelay[c.id] = t + FLIGHT - 60;
       }
-      if (e.type === 'played' || e.type === 'drew' || e.type === 'jakkMissed') t += STEP;
+      if (e.type === 'played' || e.type === 'drew' || e.type === 'finishBlocked') t += STEP;
     }
   }
 
