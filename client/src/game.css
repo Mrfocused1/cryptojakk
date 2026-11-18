@@ -1,0 +1,1598 @@
+/* Crypto Jakk game screen.
+   Charcoal table with concave emerald-framed corners on a dotted emerald backdrop; opponent name plate with a
+   fanned hand overlapping the table edge; draw pile, suit disc and discard in the middle; thin flat cards.
+   Phones: the hand sits above a row of Draw / JAKK / Play. Desktop: Draw left of the hand, JAKK over Play right.
+   The log and power-card guide are collapsible panels under the table. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ backdrop */
+.gt-screen {
+  position: relative;
+  overflow: hidden;
+  overflow: clip;
+  background:
+    radial-gradient(circle, rgba(18, 140, 86, 0.55) 0.8px, transparent 1.3px) 0 0 / 18px 18px,
+    radial-gradient(ellipse at 50% 40%, #04291b, #001810 70%);
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* diagonal emerald light streaks, top-left and bottom-right */
+.gt-screen::before,
+.gt-screen::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  width: 60vmax;
+  height: 46px;
+  pointer-events: none;
+  background: linear-gradient(transparent, rgba(0, 104, 63, 0.75) 35%, rgba(13, 207, 124, 0.85) 50%, rgba(0, 104, 63, 0.75) 65%, transparent);
+  filter: blur(6px);
+  opacity: 0.5;
+  rotate: -40deg;
+}
+.gt-screen::before {
+  top: 6%;
+  left: -38vmax;
+}
+.gt-screen::after {
+  bottom: 6%;
+  right: -38vmax;
+}
+
+/* ------------------------------------------------------------ header */
+.gt-screen .hdr.gt-hdr {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: auto;
+  padding: calc(var(--safe-t) + 8px) 12px 6px 16px;
+  background: none;
+  border: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.gt-hdr .hdr-logo {
+  order: 0;
+}
+.gt-hdr .logo-tile img {
+  height: 46px;
+}
+.gt-hdr .hdr-l {
+  order: 1;
+  flex: none;
+  padding-left: 12px;
+  border-left: 1px solid rgba(160, 190, 175, 0.55);
+}
+.gt-hdr .hdr-r {
+  order: 2;
+  margin-left: auto;
+  gap: 0;
+}
+.gt-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 0.78rem/1 var(--display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gt-mode::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #18d57f;
+  box-shadow: 0 0 8px rgba(24, 213, 127, 0.8);
+}
+.gt-hdr .hdr-btn {
+  width: 42px;
+  height: 42px;
+}
+.gt-hdr .hdr-btn .ico {
+  width: 26px;
+  height: 26px;
+}
+
+/* ------------------------------------------------------------ body */
+.gt-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 2px 12px calc(var(--safe-b) + 12px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.gt-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------ opponents */
+.gt-seats {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: -34px;
+}
+.gt-seat {
+  --fcw: 30px;
+  position: relative;
+  flex: 0 1 330px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+.gt-seat.away {
+  opacity: 0.55;
+}
+.gt-plate {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 8px;
+  border-radius: 22px;
+  border: 1px solid rgba(160, 180, 172, 0.6);
+  background: linear-gradient(120deg, #1f2b28, #07110e);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.gt-seat.active .gt-plate {
+  border-color: #23d78c;
+  box-shadow: 0 0 0 1px #23d78c, 0 0 22px rgba(35, 215, 140, 0.45), 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+.gt-avatar {
+  border-width: 2px;
+}
+.gt-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font: italic 700 1.3rem/1.1 'Playfair Display', var(--serif);
+}
+.gt-name small {
+  font: 600 0.62rem var(--display);
+  font-style: normal;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  color: #d9e4de;
+}
+.gt-name small.off {
+  color: #ff8a8a;
+}
+.gt-count {
+  flex: none;
+  min-width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 99px;
+  background: radial-gradient(circle at 40% 35%, #fffef6, #e9e4d4);
+  color: #0a1510;
+  font: 800 1.15rem/1 var(--display);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.gt-plate .jakk-badge {
+  right: -6px;
+  top: -16px;
+}
+/* the opponent's hand: card backs fanned in a shallow arc, tucked under the plate */
+.gt-fan {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: calc(var(--fcw) * 1.565 + 10px);
+  /* the fan hangs just below the plate so every card back shows whole, border included */
+  margin-top: 6px;
+}
+.gt-fan .card {
+  --cw: var(--fcw);
+  --k: calc(var(--i) - (var(--n) - 1) / 2);
+  position: absolute;
+  top: 0;
+  left: calc(50% - var(--fcw) / 2 + var(--k) * var(--fcw) * 0.72);
+  rotate: calc(var(--k) * 6deg);
+  translate: 0 calc(var(--k) * var(--k) * 1.3px);
+  transform-origin: 50% 100%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+}
+.dealing .gt-fan .card {
+  animation: dealSeat 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 75ms + 100ms);
+}
+.gt-seats[data-n='2'] .gt-seat,
+.gt-seats[data-n='3'] .gt-seat {
+  --fcw: 22px;
+}
+.gt-seats[data-n='2'] .gt-name,
+.gt-seats[data-n='3'] .gt-name {
+  font-size: 1rem;
+}
+.gt-seats[data-n='3'] .gt-count {
+  min-width: 30px;
+  height: 30px;
+  font-size: 0.95rem;
+}
+.gt-seats[data-n='3'] .gt-avatar {
+  display: none;
+}
+
+/* ------------------------------------------------------------ table */
+.gt-table {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 14px 18px;
+}
+.gt-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.5));
+}
+.gt-frame svg {
+  display: block;
+}
+.gt-table > :not(.gt-frame) {
+  position: relative;
+  z-index: 1;
+}
+
+/* centre: direction marks, draw pile, suit, discard */
+.gt-centre {
+  --cw: clamp(70px, 22vw, 96px);
+  display: grid;
+  grid-template-columns: auto auto auto auto auto;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 4.5vw, 34px);
+}
+.gt-dir {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 11px solid #58d8a0;
+  opacity: 0.85;
+  transition: rotate 0.3s;
+}
+.gt-dir[data-dir='-1'] {
+  rotate: 180deg;
+}
+.gt-pile {
+  position: relative;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.565);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.gt-pile .card {
+  position: absolute;
+  inset: 0;
+}
+.gt-draw .p3 {
+  translate: 3px 5px;
+}
+.gt-draw .p2 {
+  translate: 1.5px 2.5px;
+}
+.gt-draw.live {
+  cursor: pointer;
+}
+.gt-draw.live .p1 {
+  box-shadow: 0 0 0 2px rgba(35, 215, 140, 0.8), 0 0 16px rgba(35, 215, 140, 0.45), 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.gt-pile-count {
+  position: absolute;
+  z-index: 3;
+  right: -8px;
+  bottom: -8px;
+  min-width: 42px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: radial-gradient(circle at 40% 35%, #fffef6, #e6e0cf);
+  color: #0a1510;
+  font: 800 1.05rem/1.15 var(--display);
+  text-align: center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+.gt-discard .under {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--cw) * 0.06);
+  background: #e9e5dc;
+  translate: 3px 4px;
+  rotate: 3deg;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+}
+.gt-suit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.gt-suit-cap {
+  font: 600 0.82rem/1 var(--display);
+  letter-spacing: 0.32em;
+  padding-left: 0.32em;
+}
+.gt-suit-disc {
+  display: grid;
+  place-items: center;
+  width: clamp(54px, 15vw, 70px);
+  height: clamp(54px, 15vw, 70px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 40%, #fff, #e9eee9);
+  color: #050b08;
+  box-shadow: 0 0 0 3px rgba(35, 215, 140, 0.35), 0 0 22px rgba(24, 213, 127, 0.75), 0 0 46px rgba(24, 213, 127, 0.35);
+  animation: pop 0.35s both;
+}
+.gt-suit-disc.red {
+  color: var(--suit-red);
+}
+.gt-suit-disc .ico,
+.gt-suit-disc svg {
+  width: 52%;
+  height: 52%;
+}
+.gt-centre .callout {
+  top: 50%;
+}
+
+.gt-caption {
+  margin: 22px 0 14px;
+  font: 600 clamp(0.62rem, 2.6vw, 0.82rem) / 1.2 var(--display);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #e9f1ec;
+}
+.gt-caption.hint {
+  color: #ffd27a;
+  letter-spacing: 0.08em;
+  animation: pop 0.3s both;
+}
+
+/* turn pill */
+.gt-screen .turnlabel {
+  align-self: center;
+  min-width: min(280px, 70%);
+  justify-content: center;
+  margin-bottom: 4px;
+  padding: 7px 26px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(35, 215, 140, 0.55);
+  background: linear-gradient(180deg, #0c2a1e, #061711);
+  color: #cfe3d8;
+  font: italic 700 1.15rem/1.2 'Playfair Display', var(--serif);
+  text-shadow: none;
+  box-shadow: none;
+}
+.gt-screen .turnlabel.mine {
+  border-color: #23d78c;
+  background: linear-gradient(180deg, #0f3a28, #061a12);
+  color: #fff;
+  font-size: 1.45rem;
+  box-shadow: 0 0 0 1px rgba(35, 215, 140, 0.4), 0 0 18px rgba(35, 215, 140, 0.5), inset 0 0 12px rgba(35, 215, 140, 0.18);
+}
+.gt-screen .turnlabel.mine em {
+  font: 600 0.72rem var(--display);
+  font-style: normal;
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ------------------------------------------------------------ hand + actions */
+.gt-play {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-areas:
+    'hand hand hand'
+    'draw jakk play';
+  gap: 8px;
+}
+.gt-hand {
+  grid-area: hand;
+  min-width: 0;
+}
+.gt-play .draw-btn {
+  grid-area: draw;
+}
+.gt-play .jakk-btn {
+  grid-area: jakk;
+}
+.gt-play .play-btn {
+  grid-area: play;
+}
+
+/* thin, flat paper cards */
+.gt-screen .card {
+  border-radius: calc(var(--w) * 0.06);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+.gt-screen .card .tag {
+  left: calc(var(--w) * 0.08);
+  bottom: calc(var(--w) * 0.06);
+  border: 0;
+  background: #0b0f0d;
+  color: #fff;
+  font: 700 max(7px, calc(var(--w) * 0.13)) / 1.3 var(--display);
+  padding: 0.12em 0.55em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.gt-screen .card .tag.danger {
+  background: linear-gradient(180deg, #e8303a, #b5121c);
+}
+.gt-screen .card .tag[data-tag='WILD'] {
+  background: linear-gradient(180deg, #17924f, #0b6234);
+}
+.gt-screen .hc.legal .card {
+  box-shadow: 0 0 0 2px #23d78c, 0 0 12px rgba(35, 215, 140, 0.45), 0 6px 8px rgba(0, 0, 0, 0.4);
+}
+.gt-screen .hc.selected .card {
+  box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(35, 215, 140, 0.75), 0 10px 12px rgba(0, 0, 0, 0.45);
+}
+.gt-screen .hc {
+  transform-origin: 50% 100%;
+}
+
+.gt-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 0 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(150, 170, 162, 0.55);
+  background: linear-gradient(180deg, #2a3431, #0b1512);
+  color: #fff;
+  font: 700 clamp(1rem, 4.6vw, 1.25rem) / 1 var(--display);
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(0, 0, 0, 0.45);
+  transition: filter 0.15s, transform 0.1s, box-shadow 0.15s, opacity 0.15s;
+  cursor: pointer;
+}
+.gt-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+.gt-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gt-btn .ico {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+.gt-btn.primary {
+  border-color: #2ee39a;
+  background: linear-gradient(180deg, #11a463, #05643a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0 18px rgba(24, 213, 127, 0.35), 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+.gt-btn.primary:disabled {
+  opacity: 0.55;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 8px 18px rgba(0, 0, 0, 0.4);
+}
+.gt-play-ico {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+.gt-key {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  border: 1.5px solid currentColor;
+  border-radius: 7px;
+  font: 600 0.95rem/1 var(--display);
+}
+.gt-btn.draw-btn[data-penalty='true'] {
+  background: linear-gradient(180deg, #ff5252, #d3202b 40%, #8f0d16);
+  border-color: #ff9b9b;
+  animation: penaltyPulse 1.2s ease-out infinite;
+}
+.gt-btn.jakk-btn.armed {
+  border-color: #fff;
+  background: linear-gradient(180deg, #e8303a, #8f0d16);
+}
+.gt-btn.jakk-btn.owed {
+  border-color: #ff9b9b;
+  background: linear-gradient(180deg, #ff5252, #b3101a);
+}
+
+/* ------------------------------------------------------------ panels */
+.gt-panels {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.gt-panel {
+  border: 1px solid rgba(170, 190, 182, 0.6);
+  border-radius: 16px;
+  background: rgba(0, 20, 14, 0.75);
+}
+.gt-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 16px 0 20px;
+  cursor: pointer;
+  list-style: none;
+  font: 600 1.08rem/1.2 var(--display);
+}
+.gt-panel > summary::-webkit-details-marker {
+  display: none;
+}
+.gt-tri {
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 11px solid #fff;
+  transition: rotate 0.2s;
+}
+.gt-panel[open] .gt-tri {
+  rotate: 90deg;
+}
+.gt-sum {
+  flex: 1;
+  min-width: 0;
+}
+.gt-panel .gt-badge {
+  min-width: 40px;
+  padding: 2px 10px;
+  border: 1.5px solid #fff;
+  border-radius: 99px;
+  text-align: center;
+  font: 600 0.92rem/1.2 var(--display);
+}
+.gt-panel .gt-badge + .gt-chev {
+  margin-left: 0;
+}
+.gt-chev {
+  width: 22px;
+  height: 22px;
+  padding-left: 16px;
+  box-sizing: content-box;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.8);
+  transition: rotate 0.2s;
+}
+.gt-panel[open] .gt-chev {
+  rotate: 180deg;
+  border-left: 0;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.8);
+  padding-left: 0;
+  padding-right: 16px;
+}
+.gt-panel > :not(summary) {
+  margin: 0 16px 14px;
+}
+.gt-panel .log {
+  max-height: 34vh;
+  overflow-y: auto;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: #cfe0d6;
+}
+.gt-panel .log li.me {
+  color: #8ff0bd;
+}
+.gt-panel .power li {
+  font-size: 0.78rem;
+}
+.gt-panel .power b {
+  display: block;
+  color: #fff;
+}
+.gt-keys {
+  display: none;
+  margin-top: 14px;
+}
+
+/* ------------------------------------------------------------ tablet */
+@media (min-width: 601px) {
+  .gt-hdr .logo-tile img {
+    height: 54px;
+  }
+  .gt-mode {
+    font-size: 0.9rem;
+  }
+  .gt-body {
+    padding: 4px 24px calc(var(--safe-b) + 18px);
+  }
+  .gt-seat {
+    --fcw: 36px;
+    flex-basis: 380px;
+  }
+  .gt-table {
+    padding: 64px 32px 26px;
+  }
+  .gt-centre {
+    --cw: clamp(84px, 12vw, 112px);
+    gap: clamp(20px, 5vw, 56px);
+  }
+  .gt-play {
+    max-width: 760px;
+  }
+}
+
+/* ------------------------------------------------------------ desktop */
+@media (min-width: 1024px) {
+  .gt-screen .hdr.gt-hdr {
+    max-width: 1440px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 14px 40px 4px 56px;
+    gap: 24px;
+  }
+  .gt-hdr .logo-tile img {
+    height: 64px;
+  }
+  .gt-hdr .hdr-l {
+    padding-left: 24px;
+  }
+  .gt-hdr .hdr-r {
+    gap: 14px;
+  }
+  .gt-hdr .hdr-btn .ico {
+    width: 30px;
+    height: 30px;
+  }
+  .gt-body {
+    padding: 0 32px 20px;
+  }
+  /* one opponent: their plate rides up into the header row, centred over the table */
+  .gt-screen[data-opps='1'] .gt-body {
+    margin-top: -76px;
+  }
+  .gt-seats {
+    margin-bottom: -30px;
+  }
+  .gt-seat {
+    --fcw: 34px;
+    flex-basis: 360px;
+  }
+  /* the table grows to fill the window; its contents sit centred in it */
+  .gt-table {
+    flex: 1 0 auto;
+    justify-content: center;
+    padding: 52px 40px 32px;
+  }
+  .gt-centre {
+    --cw: clamp(84px, 12.5vh, 118px);
+    gap: 64px;
+  }
+  .gt-dir.l {
+    margin-right: 24px;
+  }
+  .gt-dir.r {
+    margin-left: 24px;
+  }
+  .gt-caption {
+    margin: 18px 0 12px;
+  }
+  .gt-play {
+    max-width: none;
+    grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(160px, 220px);
+    grid-template-areas:
+      'draw hand jakk'
+      'draw hand play';
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 22px;
+    row-gap: 12px;
+  }
+  .gt-play .draw-btn {
+    align-self: center;
+    min-height: 74px;
+    font-size: 1.6rem;
+  }
+  .gt-play .jakk-btn {
+    align-self: end;
+    min-height: 64px;
+    font-size: 1.4rem;
+  }
+  .gt-play .play-btn {
+    align-self: start;
+    min-height: 82px;
+    font-size: 1.9rem;
+  }
+  .gt-btn .ico,
+  .gt-play-ico {
+    width: 34px;
+    height: 34px;
+  }
+  .gt-panels {
+    flex: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0;
+    margin: 18px auto 0;
+    width: min(100%, 1100px);
+    border: 1px solid rgba(170, 190, 182, 0.6);
+    border-radius: 18px;
+    background: rgba(0, 20, 14, 0.75);
+  }
+  .gt-panel {
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .gt-panel + .gt-panel {
+    border-left: 1.5px solid rgba(255, 255, 255, 0.75);
+  }
+  .gt-panel > summary {
+    justify-content: center;
+    font-size: 1.2rem;
+  }
+  .gt-panel .gt-sum {
+    flex: none;
+  }
+  .gt-panel .gt-chev {
+    display: none;
+  }
+  .gt-keys {
+    display: grid;
+  }
+}
+
+/* short desktop windows: tighten vertical rhythm */
+@media (min-width: 1024px) and (max-height: 800px) {
+  .gt-hdr .logo-tile img {
+    height: 52px;
+  }
+  .gt-table {
+    padding-top: 46px;
+    padding-bottom: 22px;
+  }
+  .gt-caption {
+    margin: 12px 0 8px;
+  }
+}
+
+/* several opponents: drop "(BOT)" on phones so names have room */
+@media (max-width: 600px) {
+  .gt-seats[data-n='2'] .gt-name small,
+  .gt-seats[data-n='3'] .gt-name small {
+    display: none;
+  }
+}
+
+/* ================================================================== polish pass
+   Unplayable cards, disabled controls, desktop centre scale and header balance. */
+
+/* unplayable cards: stay paper-white, just recede (lower, softer, slightly faded) instead of turning grey */
+.gt-screen .hc.dim .card {
+  filter: saturate(0.8) brightness(0.84);
+  opacity: 1;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.gt-screen .hc.legal {
+  transform: translateY(-10px);
+}
+
+/* disabled controls: a deliberate muted state rather than a faded button */
+.gt-btn:disabled {
+  opacity: 1;
+  color: rgba(214, 228, 220, 0.42);
+  border-color: rgba(150, 170, 162, 0.22);
+  background: linear-gradient(180deg, #17201d, #0a1210);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.gt-btn:disabled .gt-key {
+  border-color: rgba(214, 228, 220, 0.3);
+}
+.gt-btn.primary:disabled {
+  opacity: 1;
+  color: rgba(190, 240, 214, 0.5);
+  border-color: rgba(46, 227, 154, 0.28);
+  background: linear-gradient(180deg, #0c3a25, #072619);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* ready to play: the button lights up */
+.gt-btn.primary:not(:disabled) {
+  animation: gtReady 2.4s ease-in-out infinite;
+}
+@keyframes gtReady {
+  50% {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0 30px rgba(24, 213, 127, 0.6), 0 8px 18px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* header: mode label carries more weight against the logo */
+.gt-hdr .hdr-l {
+  border-left-color: rgba(190, 215, 202, 0.75);
+}
+.gt-plate .gt-avatar {
+  border-color: #c9a24a;
+}
+
+@media (min-width: 1024px) {
+  .gt-mode {
+    font-size: 1.05rem;
+    gap: 10px;
+  }
+  .gt-mode::before {
+    width: 11px;
+    height: 11px;
+  }
+  /* centre group: larger cards and disc, arrows tucked in beside the piles */
+  .gt-centre {
+    --cw: clamp(104px, 15.5vh, 142px);
+    gap: 56px;
+  }
+  .gt-dir.l {
+    margin-right: 0;
+  }
+  .gt-dir.r {
+    margin-left: 0;
+  }
+  .gt-suit-disc {
+    width: 88px;
+    height: 88px;
+  }
+  .gt-suit-cap {
+    font-size: 0.95rem;
+  }
+  .gt-caption {
+    font-size: 0.9rem;
+    margin: 24px 0 14px;
+  }
+  .gt-screen .turnlabel.mine {
+    font-size: 1.7rem;
+    padding: 8px 40px;
+  }
+}
+@media (min-width: 1024px) and (max-height: 800px) {
+  .gt-centre {
+    --cw: clamp(92px, 14vh, 112px);
+  }
+  .gt-suit-disc {
+    width: 76px;
+    height: 76px;
+  }
+  .gt-caption {
+    margin: 14px 0 10px;
+  }
+}
+@media (min-width: 1024px) {
+  .gt-body {
+    max-width: 1320px;
+  }
+}
+
+/* ================================================================== quieter chrome
+   The table's furniture (name plate, turn pill, buttons, panels) steps back so the cards lead. */
+
+/* opponent name plate: slimmer, translucent, hairline border */
+.gt-plate {
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 18px;
+  border-color: rgba(160, 190, 175, 0.28);
+  background: rgba(10, 22, 18, 0.55);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.gt-plate .gt-avatar {
+  width: 30px !important;
+  height: 30px !important;
+}
+.gt-name {
+  font-size: 1.05rem;
+  color: #e4ece7;
+}
+.gt-count {
+  min-width: 30px;
+  height: 30px;
+  font-size: 0.95rem;
+  background: rgba(240, 236, 224, 0.92);
+  box-shadow: none;
+}
+.gt-seat.active .gt-plate {
+  border-color: rgba(35, 215, 140, 0.6);
+  box-shadow: 0 0 14px rgba(35, 215, 140, 0.22);
+}
+
+/* turn pill: a thin outline label rather than a lit button */
+.gt-screen .turnlabel,
+.gt-screen .turnlabel.mine {
+  min-width: 0;
+  padding: 4px 22px;
+  border-width: 1px;
+  background: rgba(6, 23, 17, 0.4);
+  box-shadow: none;
+}
+.gt-screen .turnlabel {
+  border-color: rgba(160, 190, 175, 0.3);
+  font-size: 1rem;
+}
+.gt-screen .turnlabel.mine {
+  border-color: rgba(35, 215, 140, 0.5);
+  font-size: 1.15rem;
+  color: #f2f7f4;
+}
+
+/* action buttons: smaller type, flatter surfaces, softer borders */
+.gt-btn {
+  min-height: 48px;
+  gap: 8px;
+  border-radius: 13px;
+  border-color: rgba(150, 170, 162, 0.3);
+  background: rgba(22, 32, 29, 0.7);
+  font-size: clamp(0.92rem, 4vw, 1.05rem);
+  font-weight: 600;
+  box-shadow: none;
+}
+.gt-btn .ico {
+  width: 20px;
+  height: 20px;
+}
+.gt-play-ico {
+  width: 16px;
+  height: 16px;
+}
+.gt-key {
+  min-width: 20px;
+  height: 20px;
+  border-width: 1px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+}
+.gt-btn:disabled {
+  color: rgba(214, 228, 220, 0.35);
+  border-color: rgba(150, 170, 162, 0.16);
+  background: rgba(14, 22, 19, 0.55);
+  box-shadow: none;
+}
+.gt-btn.primary {
+  border-color: rgba(46, 227, 154, 0.55);
+  background: linear-gradient(180deg, #0f8a54, #075a35);
+  box-shadow: none;
+}
+.gt-btn.primary:disabled {
+  color: rgba(190, 240, 214, 0.4);
+  border-color: rgba(46, 227, 154, 0.18);
+  background: rgba(8, 44, 29, 0.55);
+}
+@keyframes gtReady {
+  50% {
+    box-shadow: 0 0 16px rgba(24, 213, 127, 0.35);
+  }
+}
+
+/* log and guide: quiet labels on a hairline bar */
+.gt-panel > summary {
+  min-height: 42px;
+  gap: 10px;
+  font: 500 0.92rem/1.2 var(--display);
+  color: rgba(226, 236, 230, 0.75);
+}
+.gt-tri {
+  border-top-width: 5px;
+  border-bottom-width: 5px;
+  border-left-width: 8px;
+  border-left-color: rgba(226, 236, 230, 0.6);
+}
+.gt-panel .gt-badge {
+  min-width: 30px;
+  padding: 1px 8px;
+  border-width: 1px;
+  border-color: rgba(226, 236, 230, 0.45);
+  font-size: 0.78rem;
+}
+.gt-chev {
+  width: 18px;
+  height: 18px;
+  border-left-color: rgba(226, 236, 230, 0.3);
+}
+.gt-panel,
+.gt-panels {
+  border-color: rgba(170, 190, 182, 0.25);
+  background: rgba(0, 20, 14, 0.45);
+}
+
+@media (min-width: 1024px) {
+  .gt-plate .gt-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .gt-name {
+    font-size: 1.15rem;
+  }
+  .gt-screen .turnlabel.mine {
+    font-size: 1.25rem;
+    padding: 5px 30px;
+  }
+  .gt-play .draw-btn {
+    min-height: 54px;
+    font-size: 1.15rem;
+  }
+  .gt-play .jakk-btn {
+    min-height: 48px;
+    font-size: 1.05rem;
+  }
+  .gt-play .play-btn {
+    min-height: 58px;
+    font-size: 1.25rem;
+  }
+  .gt-btn .ico {
+    width: 22px;
+    height: 22px;
+  }
+  .gt-play-ico {
+    width: 18px;
+    height: 18px;
+  }
+  .gt-panel > summary {
+    font-size: 0.98rem;
+  }
+  .gt-panel + .gt-panel {
+    border-left: 1px solid rgba(226, 236, 230, 0.2);
+  }
+  .gt-panels .gt-panel {
+    background: none;
+  }
+}
+
+/* ================================================================== quieter still
+   Chrome becomes near-invisible until needed: no fills, faint hairlines, small muted type. */
+.gt-plate {
+  padding: 2px 4px;
+  border-color: rgba(160, 190, 175, 0.14);
+  background: rgba(10, 22, 18, 0.3);
+  box-shadow: none;
+}
+.gt-plate .gt-avatar {
+  width: 24px !important;
+  height: 24px !important;
+  opacity: 0.85;
+}
+.gt-name {
+  font-size: 0.92rem;
+  color: rgba(228, 236, 231, 0.78);
+}
+.gt-name small {
+  color: rgba(217, 228, 222, 0.5);
+}
+.gt-count {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 0.8rem;
+  background: rgba(240, 236, 224, 0.14);
+  color: rgba(240, 244, 241, 0.85);
+}
+.gt-seat.active .gt-plate {
+  border-color: rgba(35, 215, 140, 0.35);
+  box-shadow: none;
+}
+
+.gt-screen .turnlabel,
+.gt-screen .turnlabel.mine {
+  padding: 2px 16px;
+  border-color: transparent;
+  background: none;
+}
+.gt-screen .turnlabel {
+  font-size: 0.92rem;
+  color: rgba(207, 227, 216, 0.6);
+}
+.gt-screen .turnlabel.mine {
+  font-size: 1.05rem;
+  color: rgba(242, 247, 244, 0.9);
+  border-bottom: 1px solid rgba(35, 215, 140, 0.45);
+  border-radius: 0;
+}
+
+.gt-btn {
+  min-height: 44px;
+  border-color: rgba(150, 170, 162, 0.16);
+  background: rgba(22, 32, 29, 0.35);
+  color: rgba(236, 243, 239, 0.85);
+  font-size: clamp(0.86rem, 3.6vw, 0.95rem);
+  font-weight: 500;
+}
+.gt-btn .ico {
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+}
+.gt-key {
+  min-width: 18px;
+  height: 18px;
+  font-size: 0.66rem;
+  opacity: 0.6;
+}
+.gt-btn:disabled {
+  color: rgba(214, 228, 220, 0.24);
+  border-color: rgba(150, 170, 162, 0.08);
+  background: rgba(14, 22, 19, 0.25);
+}
+.gt-btn.primary {
+  border-color: rgba(46, 227, 154, 0.35);
+  background: rgba(15, 138, 84, 0.55);
+}
+.gt-btn.primary:disabled {
+  color: rgba(190, 240, 214, 0.26);
+  border-color: rgba(46, 227, 154, 0.1);
+  background: rgba(8, 44, 29, 0.3);
+}
+.gt-btn.primary:not(:disabled) {
+  animation: none;
+}
+
+.gt-panel > summary {
+  min-height: 36px;
+  font: 400 0.82rem/1.2 var(--display);
+  color: rgba(226, 236, 230, 0.5);
+}
+.gt-tri {
+  border-top-width: 4px;
+  border-bottom-width: 4px;
+  border-left-width: 6px;
+  border-left-color: rgba(226, 236, 230, 0.4);
+}
+.gt-panel .gt-badge {
+  min-width: 24px;
+  padding: 0 6px;
+  border-color: rgba(226, 236, 230, 0.25);
+  font-size: 0.7rem;
+}
+.gt-chev {
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+  border-left-color: rgba(226, 236, 230, 0.15);
+}
+.gt-panel,
+.gt-panels {
+  border-color: rgba(170, 190, 182, 0.12);
+  background: none;
+}
+
+@media (min-width: 1024px) {
+  .gt-plate .gt-avatar {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .gt-name {
+    font-size: 1rem;
+  }
+  .gt-screen .turnlabel.mine {
+    font-size: 1.12rem;
+    padding: 2px 20px;
+  }
+  .gt-play .draw-btn {
+    min-height: 46px;
+    font-size: 1rem;
+  }
+  .gt-play .jakk-btn {
+    min-height: 42px;
+    font-size: 0.95rem;
+  }
+  .gt-play .play-btn {
+    min-height: 48px;
+    font-size: 1.05rem;
+  }
+  .gt-btn .ico {
+    width: 18px;
+    height: 18px;
+  }
+  .gt-play-ico {
+    width: 14px;
+    height: 14px;
+  }
+  .gt-panel > summary {
+    font-size: 0.86rem;
+  }
+  .gt-panel + .gt-panel {
+    border-left-color: rgba(226, 236, 230, 0.1);
+  }
+}
+
+/* mode label: a small gold mark (CPU chip for bots, people for friends) in place of the status dot */
+.gt-mode::before {
+  display: none;
+}
+.gt-mode-ico {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+@media (min-width: 1024px) {
+  .gt-mode-ico {
+    width: 32px;
+    height: 32px;
+  }
+}
+/* one opponent on desktop: lower the plate and fan so the plate sits level with the header row, and let the
+   fan overlap the table edge a little more (the table itself stays put) */
+@media (min-width: 1024px) {
+  .gt-screen[data-opps='1'] .gt-seats {
+    padding-top: 24px;
+    margin-bottom: -54px;
+  }
+}
+
+/* ================================================================== action buttons, v2
+   Slim pills with a gold chip badge from the homepage icon set (cards = Draw, spade = JAKK, play = Play),
+   a faint gold hairline and small tracked caps. Keyboard letters only appear once the keyboard is in use. */
+.gt-btn {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 16px 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(217, 179, 92, 0.22);
+  background: linear-gradient(180deg, rgba(24, 34, 30, 0.55), rgba(10, 18, 15, 0.55));
+  color: rgba(240, 233, 214, 0.88);
+  font: 600 clamp(0.74rem, 3.2vw, 0.84rem) / 1 var(--display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+.gt-btn > span {
+  flex: 1;
+  text-align: center;
+  padding-right: 6px;
+}
+.gt-btn-badge {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  transition: filter 0.2s, opacity 0.2s, rotate 0.4s;
+}
+.gt-btn .kh {
+  font: 600 0.62rem/1 var(--display);
+  letter-spacing: 0;
+  opacity: 0.6;
+}
+@media (hover: hover) {
+  .gt-btn:not(:disabled):hover {
+    border-color: rgba(217, 179, 92, 0.5);
+  }
+  .gt-btn:not(:disabled):hover .gt-btn-badge {
+    rotate: 20deg;
+  }
+}
+/* Play when available: deep emerald with a gold edge */
+.gt-btn.primary {
+  border-color: rgba(217, 179, 92, 0.45);
+  background: linear-gradient(180deg, rgba(14, 110, 66, 0.75), rgba(6, 66, 39, 0.75));
+  color: #fdf6e3;
+}
+.gt-btn.primary:not(:disabled) {
+  animation: none;
+  box-shadow: 0 0 14px rgba(24, 213, 127, 0.22);
+}
+/* unavailable: badge goes grey and the label fades */
+.gt-btn:disabled,
+.gt-btn.primary:disabled {
+  border-color: rgba(217, 179, 92, 0.1);
+  background: rgba(12, 20, 17, 0.4);
+  color: rgba(226, 222, 210, 0.32);
+  box-shadow: none;
+}
+.gt-btn:disabled .gt-btn-badge {
+  filter: grayscale(1) brightness(0.7);
+  opacity: 0.45;
+}
+/* penalty and JAKK states keep their colour, inside the new shape */
+.gt-btn.draw-btn[data-penalty='true'] {
+  border-color: rgba(255, 155, 155, 0.7);
+  background: linear-gradient(180deg, rgba(211, 32, 43, 0.85), rgba(143, 13, 22, 0.85));
+  color: #fff;
+}
+.gt-btn.jakk-btn.armed,
+.gt-btn.jakk-btn.owed {
+  border-color: rgba(255, 155, 155, 0.7);
+  background: linear-gradient(180deg, rgba(232, 48, 58, 0.85), rgba(143, 13, 22, 0.85));
+  color: #fff;
+}
+@media (min-width: 1024px) {
+  .gt-play .draw-btn,
+  .gt-play .jakk-btn,
+  .gt-play .play-btn {
+    min-height: 52px;
+    font-size: 0.9rem;
+  }
+  .gt-btn-badge {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* ================================================================== opponent label, v2
+   No panel: a small muted tag (avatar, name, card count) that sits beside the opponent's fan instead of
+   above it. With several opponents it sits under each fan. */
+.gt-seats,
+.gt-screen[data-opps='1'] .gt-seats {
+  padding-top: 0;
+  margin-bottom: -34px;
+}
+.gt-screen[data-opps='1'] .gt-body {
+  margin-top: 0;
+}
+.gt-seat {
+  flex-basis: 100%;
+}
+.gt-plate,
+.gt-seat.active .gt-plate {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--fcw) * 0.55);
+  left: calc(50% + var(--fcw) * 0.5 + (var(--n) - 1) / 2 * var(--fcw) * 0.72 + 16px);
+  width: auto;
+  max-width: calc(50% - var(--fcw) * 0.5 - (var(--n) - 1) / 2 * var(--fcw) * 0.72 - 20px);
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.gt-plate .gt-avatar {
+  width: 22px !important;
+  height: 22px !important;
+  border-width: 1px;
+  opacity: 0.8;
+}
+.gt-name {
+  flex: 0 1 auto;
+  text-align: left;
+  font-size: 0.86rem;
+  color: rgba(226, 236, 230, 0.55);
+}
+.gt-name small {
+  display: none;
+}
+.gt-count {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  color: rgba(226, 236, 230, 0.45);
+  font: 500 0.78rem/1 var(--display);
+}
+.gt-count::after {
+  content: ' cards';
+}
+.gt-count[data-count='1']::after {
+  content: ' card';
+}
+/* whose turn: the name brightens, nothing else */
+.gt-seat.active .gt-name {
+  color: rgba(143, 240, 189, 0.95);
+}
+.gt-fan {
+  margin-top: 0;
+}
+/* several opponents: the tag sits centred under each small fan */
+.gt-seats[data-n='2'] .gt-plate,
+.gt-seats[data-n='3'] .gt-plate {
+  top: auto;
+  bottom: -18px;
+  left: 50%;
+  max-width: 100%;
+  translate: -50% 0;
+}
+.gt-seats[data-n='2'],
+.gt-seats[data-n='3'] {
+  margin-bottom: -16px;
+}
+.gt-seats[data-n='2'] .gt-plate .gt-avatar,
+.gt-seats[data-n='3'] .gt-plate .gt-avatar {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .gt-screen[data-opps='1'] .gt-seats {
+    margin-bottom: -36px;
+  }
+  .gt-name {
+    font-size: 0.92rem;
+  }
+}
+
+/* opponent tag: always one line; phones drop the avatar and the word "cards" to make room */
+.gt-plate,
+.gt-name,
+.gt-count {
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .gt-plate .gt-avatar {
+    display: none;
+  }
+  .gt-count::after,
+  .gt-count[data-count='1']::after {
+    content: '';
+  }
+  .gt-count::before {
+    content: '· ';
+  }
+}
+
+/* WILD is not printed on cards (aces are recognisable on their own); the other power tags stay */
+.card .tag[data-tag='WILD'] {
+  display: none;
+}
+
+/* suit picker: four playing cards on the same textured stock as the deck */
+.suit-grid {
+  gap: 14px;
+}
+.suit-btn {
+  position: relative;
+  aspect-ratio: 1 / 1.565;
+  min-height: 0;
+  width: 100%;
+  max-width: 150px;
+  justify-self: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 7.5% / 4.8%;
+  background: #f1efec url('/art/card-stock.webp') center / 100% 100% no-repeat;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 6px 14px rgba(0, 0, 0, 0.5);
+  font: 900 0.95rem/1 'Roboto Slab', var(--serif);
+  letter-spacing: 0.02em;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+.suit-btn.black {
+  color: #141414;
+}
+.suit-btn.red {
+  color: #c8102e;
+}
+.suit-btn .sb-pip {
+  width: 46%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.suit-btn .sb-corner {
+  position: absolute;
+  width: 14%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.suit-btn .sb-corner.tl {
+  top: 6%;
+  left: 8%;
+}
+.suit-btn .sb-corner.br {
+  bottom: 6%;
+  right: 8%;
+  rotate: 180deg;
+}
+.suit-btn .kh {
+  top: auto;
+  bottom: 6%;
+  left: 8%;
+}
+.suit-btn.hl {
+  outline: 2px solid #23d78c;
+  outline-offset: 4px;
+}
+@media (hover: hover) {
+  .suit-btn:hover {
+    transform: translateY(-4px) rotate(-1.5deg);
+    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 12px 22px rgba(0, 0, 0, 0.55);
+  }
+}
+@media (max-width: 600px) {
+  .suit-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .suit-btn {
+    font-size: 0.66rem;
+    gap: 5px;
+  }
+}
+
+/* How to Play: the JAKK rule as a gold-edged feature panel with the spade badge (matches the JAKK button) */
+.how-jakk {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'badge title'
+    'badge text';
+  column-gap: 16px;
+  row-gap: 4px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(217, 179, 92, 0.45);
+  background:
+    radial-gradient(ellipse at 0% 50%, rgba(217, 179, 92, 0.12), transparent 60%),
+    linear-gradient(180deg, rgba(10, 24, 18, 0.85), rgba(4, 14, 10, 0.85));
+  box-shadow: inset 0 1px 0 rgba(255, 236, 190, 0.08), 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.how-jakk-badge {
+  grid-area: badge;
+  align-self: start;
+  width: 56px;
+  height: 56px;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
+}
+.how-jakk .how-h {
+  grid-area: title;
+  margin: 0;
+  color: #e9c977;
+  font: italic 800 1.35rem/1.15 'Playfair Display', var(--serif);
+  letter-spacing: 0;
+}
+.how-jakk p {
+  grid-area: text;
+  margin: 0;
+  color: rgba(236, 240, 237, 0.88);
+}
+.how-jakk p b {
+  color: #f3dfa6;
+}
+@media (max-width: 600px) {
+  .how-jakk {
+    grid-template-areas:
+      'badge title'
+      'text text';
+    row-gap: 10px;
+  }
+  .how-jakk-badge {
+    width: 44px;
+    height: 44px;
+    align-self: center;
+  }
+}
+
+/* the in-game logo is a button (home, with a leave prompt); strip button chrome */
+button.hdr-logo {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+/* the count's "cards" suffix must stay on the same line (the base rule made the count a grid) */
+.gt-plate .gt-count {
+  display: inline-block;
+  line-height: 1;
+}

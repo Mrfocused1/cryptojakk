@@ -64,7 +64,8 @@ interface Seat extends Profile {
 }
 
 const BOT_NAMES = ['Ada', 'Grace', 'Linus', 'Hedy', 'Alan', 'Margaret', 'Dennis', 'Radia'];
-const BOT_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+/** Bot avatar chips: emerald and charcoal tones that sit in the game screen's palette. */
+const BOT_COLORS = ['#0d5a35', '#16171a', '#1f5f5b', '#0b4429', '#14302a', '#2b5a3c'];
 const MAX_SEATS = DEFAULT_RULES.maxPlayers;
 
 export class Room {
@@ -292,7 +293,7 @@ export class Room {
     return {
       playerId: `bot_${idx}${this.seats.length}`,
       name,
-      avatar: { emoji: '🤖', color: BOT_COLORS[this.seats.length % BOT_COLORS.length] },
+      avatar: { icon: 'cpu', color: BOT_COLORS[this.seats.length % BOT_COLORS.length] },
     };
   }
 

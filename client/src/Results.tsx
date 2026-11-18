@@ -48,8 +48,8 @@ export function Results({ view, room }: { view: PlayerView; room: RoomSnapshot }
     <div className="results-wrap" data-testid="results">
       <div className={`results ${iWon ? 'win' : ''}`} role="dialog" aria-modal="true" aria-label="Game over">
         {iWon && <Confetti />}
-        <ChipStack color="red" n={4} className="res-chip l" />
-        <ChipStack color="black" n={3} className="res-chip r" />
+        <ChipStack color="red" className="res-chip l" />
+        <ChipStack color="black" className="res-chip r" />
         <p className="results-kicker">{iWon ? 'You win!' : 'Game over'}</p>
         <h2 className="results-title">{iWon ? 'Hand cleared!' : `${winner?.p.name ?? 'Someone'} wins`}</h2>
         <ul className="results-list">

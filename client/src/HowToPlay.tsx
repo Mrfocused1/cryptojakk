@@ -66,7 +66,8 @@ export function HowToPlayContent() {
         </ul>
       </section>
       <section className="how-jakk">
-        <h3 className="how-h">JAKK!</h3>
+        <img className="how-jakk-badge" src="/art/icon-spade.webp" alt="" width="64" height="64" draggable={false} />
+        <h3 className="how-h">Say JAKK!</h3>
         <p>
           When you are down to <b>one card</b>, you must say <b>JAKK</b>. Hit the JAKK button <b>before the next player moves</b>: arm it while you play your second-to-last card, or tap it right after. Forget, and you pick up <b>{R.jakkMissPenalty}</b>.
         </p>

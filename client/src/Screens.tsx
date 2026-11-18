@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { type Card, DEFAULT_RULES } from '@shared/engine';
 import { NAME_MAX_LENGTH, normalizeRoomCode, sanitizeName } from '@shared/protocol';
 import { AppHeader, Avatar, CardBack, CardFace, DecoChips, Icon, LogoTile, ChipStack, useMuted } from './components';
-import { AVATAR_COLORS, AVATAR_EMOJIS, type Identity, randomGuest } from './identity';
+import { AVATAR_COLORS, AVATAR_ICONS, type Identity, randomGuest } from './identity';
 import { navigate } from './router';
-import { clearJoinError, createFriendsRoom, ensureMultiplayer, joinCode, playAI, playNow, retryMultiplayer, setIdentity, useApp } from './store';
+import { clearJoinError, createFriendsRoom, ensureMultiplayer, joinCode, playAI, playNow, retryMultiplayer, setIdentity, toast, useApp } from './store';
 import { setMuted, unlockAudio } from './sound';
-import { setReduce, useReduce } from './prefs';
+import { isReduced, setReduce, useReduce } from './prefs';
 
 const card = (id: string): Card => ({ id, rank: id.slice(0, -1) as Card['rank'], suit: id.slice(-1) as Card['suit'] });
 
@@ -31,10 +31,10 @@ export function TableArc({ className = '' }: { className?: string }) {
   );
 }
 
-function Panel({ icon, title, text, onClick, testid, go = true, lock = false }: { icon: string; title: string; text: string; onClick?: () => void; testid?: string; go?: boolean; lock?: boolean }) {
+function Panel({ icon, art, title, text, onClick, testid, go = true, lock = false }: { icon: string; art?: string; title: string; text: string; onClick?: () => void; testid?: string; go?: boolean; lock?: boolean }) {
   const inner = (
     <>
-      <Icon name={icon} className="row-ico" />
+      {art ? <img className="row-art" src={`/art/icon-${art}.webp`} alt="" width="46" height="46" draggable={false} /> : <Icon name={icon} className="row-ico" />}
       <span className="row-t">
         <strong>{title}</strong>
         <small>{text}</small>
@@ -83,7 +83,7 @@ function HeroCards({ className = '' }: { className?: string }) {
         <CardFace card={card('AS')} />
       </div>
       <div className="hc-card c2">
-        <CardFace card={card('KH')} />
+        <CardFace card={card('KS')} />
       </div>
       <div className="hc-card c3">
         <CardBack />
@@ -94,83 +94,117 @@ function HeroCards({ className = '' }: { className?: string }) {
 
 // ------------------------------------------------------------------ landing
 
+/**
+ * Fade-blur for the landing page: most elements blur and fade in as they enter the viewport and back out
+ * as they leave it, in either scroll direction. Siblings are staggered on the way in. Skipped entirely
+ * when the user asked for less motion.
+ */
+const FX_TARGETS = '.hero-copy > *, .fb, .sec > :not(.rows):not(.whys):not(.faq), .rows > *, .whys > *, .faq > *';
+function useScrollReveal(root: React.RefObject<HTMLDivElement | null>) {
+  // Layout effect: tag elements before the first paint so nothing flashes sharp and then blurs.
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el || isReduced() || typeof IntersectionObserver === 'undefined') return;
+    const targets = [...el.querySelectorAll<HTMLElement>(FX_TARGETS)];
+    for (const t of targets) {
+      const i = t.parentElement ? [...t.parentElement.children].indexOf(t) : 0;
+      t.style.setProperty('--d', `${Math.min(i, 6) * 70}ms`);
+      t.classList.add('fx');
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) e.target.classList.toggle('in', e.isIntersecting);
+      },
+      { root: el, rootMargin: '-6% 0px -6% 0px', threshold: 0.12 },
+    );
+    for (const t of targets) io.observe(t);
+    return () => {
+      io.disconnect();
+      for (const t of targets) t.classList.remove('fx', 'in');
+    };
+  }, [root]);
+}
+
 export function Landing() {
   const { identity } = useApp();
   const [busy, setBusy] = useState(false);
+  // The header floats over the hero scene and gains a solid backing once the page scrolls under it.
+  const [scrolled, setScrolled] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useScrollReveal(bodyRef);
   const go = () => {
     unlockAudio();
     setBusy(true);
     playNow();
     setTimeout(() => setBusy(false), 1500);
   };
-  const toId = (id: string) => () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
     <div className="screen page landing">
       <AppHeader
-        className="hdr-landing"
+        className={`hdr-landing ${scrolled ? 'scrolled' : ''}`}
         nav={
           <nav className="hdr-nav" aria-label="Site">
-            <button onClick={go}>Play</button>
-            <button onClick={() => navigate('/friends')}>Play Friends</button>
-            <button onClick={() => navigate('/how-to-play')}>How to Play</button>
-            <button onClick={toId('faq')}>FAQ</button>
+            <button onClick={go}>Play Blackjack</button>
+            <button onClick={() => navigate('/how-to-play')}>How It Works</button>
+            <button onClick={() => toast('Rewards are coming soon.')}>Rewards</button>
+            <button onClick={() => toast('VIP is coming soon.')}>VIP</button>
           </nav>
         }
         extra={
-          <button className="pill sm hdr-cta" onClick={go} disabled={busy}>
-            Play Now <Icon name="next" />
-          </button>
+          <>
+            <button className="pill sm hdr-cta hdr-login" onClick={() => navigate('/profile')}>
+              Log In
+            </button>
+            <button className="pill sm primary hdr-cta" onClick={go} disabled={busy}>
+              Play Now
+            </button>
+          </>
         }
       />
-      <div className="body">
-        <section className="hero">
-          <DecoChips variant="sides" />
+      <div className="body" ref={bodyRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}>
+        <section className="hero cine">
+          <div className="cine-art" aria-hidden="true">
+            <img className="cine-far" src="/art/chips-black.webp" alt="" draggable={false} />
+            <img className="cine-chips" src="/art/chips-group.webp" alt="" draggable={false} />
+            <div className="cine-cards">
+              <CardBack />
+              <CardFace card={card('AS')} />
+            </div>
+          </div>
           <div className="hero-copy">
-            <p className="eyebrow">The UK card-shedding table</p>
+            <p className="eyebrow">The Crypto Blackjack Table</p>
             <h1 className="title">
               Play Blackjack.
               <br />
-              Dump Your Hand.
+              Earn Crypto.
             </h1>
-            <p className="subtitle">Match suit or rank, play your power cards and be first to empty your hand. Free to play, no sign-up.</p>
+            <p className="subtitle">Classic blackjack. Real stakes. Crypto rewards.</p>
             <button className="pill primary big" data-testid="play-now" onClick={go} disabled={busy}>
               {busy ? 'Dealing...' : 'Play Now'} <Icon name="next" />
             </button>
-            <p className="micro">vs 1 bot, instantly</p>
-          </div>
-          <div className="hero-stage">
-            <HeroCards />
-            <TableArc />
           </div>
         </section>
 
         <section className="feature-bar" aria-label="Highlights">
           <div className="fb">
-            <Icon name="cards" />
+            <img className="fb-ico" src="/art/icon-cards.webp" alt="" width="56" height="56" draggable={false} />
             <span>
-              <strong>Classic Shedding</strong>
-              <small>The UK card game you know and love.</small>
+              <strong>Authentic Gameplay</strong>
+              <small>The blackjack you know and love.</small>
             </span>
           </div>
           <div className="fb">
-            <Icon name="bolt" />
+            <img className="fb-ico" src="/art/icon-coins.webp" alt="" width="56" height="56" draggable={false} />
             <span>
-              <strong>Play Instantly</strong>
-              <small>One tap, one bot, no sign-up.</small>
+              <strong>Crypto Rewards</strong>
+              <small>Win and withdraw real crypto.</small>
             </span>
           </div>
           <div className="fb">
-            <Icon name="users" />
+            <img className="fb-ico" src="/art/icon-shield.webp" alt="" width="56" height="56" draggable={false} />
             <span>
-              <strong>Play with Friends</strong>
-              <small>Private rooms through a shared link.</small>
-            </span>
-          </div>
-          <div className="fb">
-            <Icon name="shield" />
-            <span>
-              <strong>Fair Shuffles</strong>
-              <small>Cryptographically random deals.</small>
+              <strong>Trusted &amp; Secure</strong>
+              <small>A fair and transparent platform.</small>
             </span>
           </div>
         </section>
@@ -180,10 +214,10 @@ export function Landing() {
           <h2 className="title h2">Game Lobby</h2>
           <p className="subtitle">Jump in against bots or set up a private table.</p>
           <div className="rows">
-            <Panel icon="spade" title="Quick Game" text="Face one bot, dealt in instantly" onClick={go} />
-            <Panel icon="bot" title="Play AI" text="Take on one, two or three bots" onClick={() => navigate('/ai')} testid="play-ai" />
-            <Panel icon="users" title="Play Friends" text="Private room, share a link" onClick={() => navigate('/friends')} testid="play-friends" lock />
-            <Panel icon="hash" title="Join with Code" text="Got a five-letter room code?" onClick={() => navigate('/friends')} />
+            <Panel icon="spade" art="bolt" title="Quick Game" text="Face one bot, dealt in instantly" onClick={go} />
+            <Panel icon="bot" art="robot" title="Play CPU" text="Take on one, two or three bots" onClick={() => navigate('/ai')} testid="play-ai" />
+            <Panel icon="users" art="users" title="Play Friends" text="Private room, share a link" onClick={() => navigate('/friends')} testid="play-friends" lock />
+            <Panel icon="hash" art="hash" title="Join with Code" text="Got a five-letter room code?" onClick={() => navigate('/friends')} />
           </div>
           <button className="pill secondary" data-testid="how-to-play" onClick={() => navigate('/how-to-play')}>
             <Icon name="help" /> How to Play
@@ -201,9 +235,9 @@ export function Landing() {
           <h2 className="title h2">How It Works</h2>
           <p className="subtitle">From name to first card in three simple steps.</p>
           <div className="rows cols3">
-            <Panel icon="user" title="1. Pick a name" text="Choose a nickname and avatar. No account needed." go={false} />
-            <Panel icon="cards" title="2. Start a game" text="Play a bot, or send friends a room link." go={false} />
-            <Panel icon="spade" title="3. Dump your hand" text="Match suit or rank, use power cards and call JAKK on one card." go={false} />
+            <Panel icon="user" art="person" title="1. Pick a name" text="Choose a nickname and avatar. No account needed." go={false} />
+            <Panel icon="cards" art="cards" title="2. Start a game" text="Play a bot, or send friends a room link." go={false} />
+            <Panel icon="spade" art="spade" title="3. Dump your hand" text="Match suit or rank, use power cards and call JAKK on one card." go={false} />
           </div>
           <button className="pill primary" onClick={go} disabled={busy}>
             Play Now <Icon name="next" />
@@ -216,28 +250,28 @@ export function Landing() {
           <p className="subtitle">A quick, friendly card game with a modern look.</p>
           <div className="whys">
             <div className="why">
-              <Icon name="spade" />
+              <img className="why-art" src="/art/icon-spade.webp" alt="" width="52" height="52" draggable={false} />
               <span>
                 <strong>Classic Gameplay</strong>
                 <small>Match the top card, empty your hand. Easy to learn, hard to put down.</small>
               </span>
             </div>
             <div className="why">
-              <Icon name="bolt" />
+              <img className="why-art" src="/art/icon-power.webp" alt="" width="52" height="52" draggable={false} />
               <span>
                 <strong>Power Cards</strong>
                 <small>2s, Jacks, 7s, 8s and wild Aces keep every turn lively.</small>
               </span>
             </div>
             <div className="why">
-              <Icon name="phone" />
+              <img className="why-art" src="/art/icon-device.webp" alt="" width="52" height="52" draggable={false} />
               <span>
                 <strong>Play Anywhere</strong>
                 <small>Phone, tablet or desktop, with keyboard shortcuts at the table.</small>
               </span>
             </div>
             <div className="why">
-              <Icon name="shield" />
+              <img className="why-art" src="/art/icon-shield.webp" alt="" width="52" height="52" draggable={false} />
               <span>
                 <strong>A Fair Game</strong>
                 <small>Shuffles use a secure random number generator, and the rules are public.</small>
@@ -278,7 +312,7 @@ export function GuestEntry({ mode, invite, onDone }: { mode: 'new' | 'edit'; inv
   const { identity } = useApp();
   const [seed] = useState<Identity>(() => identity ?? randomGuest());
   const [name, setName] = useState(identity ? seed.name : '');
-  const [emoji, setEmoji] = useState(seed.avatar.emoji ?? AVATAR_EMOJIS[0]);
+  const [icon, setIcon] = useState(seed.avatar.icon && AVATAR_ICONS.includes(seed.avatar.icon) ? seed.avatar.icon : AVATAR_ICONS[0]);
   const [color, setColor] = useState(seed.avatar.color);
   const muted = useMuted();
   const reduce = useReduce();
@@ -286,7 +320,7 @@ export function GuestEntry({ mode, invite, onDone }: { mode: 'new' | 'edit'; inv
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!clean) return;
-    setIdentity({ name: clean, avatar: { emoji, color } });
+    setIdentity({ name: clean, avatar: { icon, color } });
     onDone?.();
   };
   return (
@@ -302,7 +336,7 @@ export function GuestEntry({ mode, invite, onDone }: { mode: 'new' | 'edit'; inv
         <h1 className="title h2">{mode === 'edit' ? 'Profile & Settings' : "Who's Playing?"}</h1>
         <p className="subtitle">{mode === 'edit' ? 'Change how you appear at the table and tune the game to your liking.' : 'Pick a name and an avatar. No account needed.'}</p>
         <div className="preview-row">
-          <Avatar avatar={{ emoji, color }} size={84} className="preview" />
+          <Avatar avatar={{ icon, color }} size={84} className="preview" />
         </div>
         <label className="field">
           <span>Display name</span>
@@ -322,9 +356,9 @@ export function GuestEntry({ mode, invite, onDone }: { mode: 'new' | 'edit'; inv
         <fieldset className="pick">
           <legend>Pick an avatar</legend>
           <div className="emoji-grid">
-            {AVATAR_EMOJIS.map((em) => (
-              <button type="button" key={em} className={`pick-btn ${em === emoji ? 'on' : ''}`} onClick={() => setEmoji(em)} aria-pressed={em === emoji} aria-label={`Avatar ${em}`}>
-                {em}
+            {AVATAR_ICONS.map((ic) => (
+              <button type="button" key={ic} className={`pick-btn ${ic === icon ? 'on' : ''}`} onClick={() => setIcon(ic)} aria-pressed={ic === icon} aria-label={`Avatar ${ic}`}>
+                <Avatar avatar={{ icon: ic, color }} size={34} />
               </button>
             ))}
           </div>
@@ -383,7 +417,7 @@ export function MultiplayerOffline({ onRetry }: { onRetry: () => void }) {
           Retry <Icon name="next" />
         </button>
         <button className="pill secondary" data-testid="mp-play-ai" onClick={() => navigate('/ai')}>
-          Play vs AI instead
+          Play vs CPU instead
         </button>
         <button className="pill secondary" onClick={() => navigate('/')}>
           Home
@@ -511,7 +545,7 @@ export function PlayAI() {
       <AppHeader onBack={() => navigate('/')} backLabel="Home" />
       <div className="body narrow">
         <p className="eyebrow">Solo table</p>
-        <h1 className="title h2">Play AI</h1>
+        <h1 className="title h2">Play CPU</h1>
         <p className="subtitle">How many bots do you want to beat?</p>
         <div className="seg" role="radiogroup" aria-label="Number of opponents">
           {[1, 2, 3].map((k) => (

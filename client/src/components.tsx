@@ -4,6 +4,7 @@ import type { Avatar as AvatarT } from '@shared/protocol';
 import { takeOver, useApp } from './store';
 import { navigate } from './router';
 import { CourtArt } from './CourtArt';
+import { AVATAR_ICON_ART, markColour } from './avatarIcons';
 import { SUIT_PATH } from './suitPaths';
 import { isMuted, setMuted, subscribeMuted } from './sound';
 
@@ -40,29 +41,55 @@ export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: s
   }
 }
 
+/** Standard pip positions for 2-10 inside the pip box: [x, y] with x in {0, .5, 1} and y from 0 (top) to 1. */
+const PIP_LAYOUT: Record<string, Array<[number, number]>> = {
+  '2': [[0.5, 0], [0.5, 1]],
+  '3': [[0.5, 0], [0.5, 0.5], [0.5, 1]],
+  '4': [[0, 0], [1, 0], [0, 1], [1, 1]],
+  '5': [[0, 0], [1, 0], [0.5, 0.5], [0, 1], [1, 1]],
+  '6': [[0, 0], [1, 0], [0, 0.5], [1, 0.5], [0, 1], [1, 1]],
+  '7': [[0, 0], [1, 0], [0.5, 0.25], [0, 0.5], [1, 0.5], [0, 1], [1, 1]],
+  '8': [[0, 0], [1, 0], [0.5, 0.25], [0, 0.5], [1, 0.5], [0.5, 0.75], [0, 1], [1, 1]],
+  '9': [[0, 0], [1, 0], [0, 1 / 3], [1, 1 / 3], [0.5, 0.5], [0, 2 / 3], [1, 2 / 3], [0, 1], [1, 1]],
+  '10': [[0, 0], [1, 0], [0.5, 1 / 6], [0, 1 / 3], [1, 1 / 3], [0, 2 / 3], [1, 2 / 3], [0.5, 5 / 6], [0, 1], [1, 1]],
+};
+
 export function CardFace({ card, rules, className = '', style }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties }) {
   const tag = powerTag(card, rules);
   const court = card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' ? card.rank : null;
+  // The king of spades uses the photographed panel; the other court cards are drawn.
+  const kingArt = card.rank === 'K' && card.suit === 'S';
+  const index = (
+    <>
+      <b>{card.rank}</b>
+      <SuitIcon suit={card.suit} />
+    </>
+  );
   return (
-    <div className={`card ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${court && tag ? 'has-tag' : ''} ${className}`} style={style}>
-      {court && <CourtArt rank={court} suit={card.suit} />}
-      <span className="corner">
-        <b>{card.rank}</b>
-        <SuitIcon suit={card.suit} />
+    <div className={`card face ${PIP_LAYOUT[card.rank] ? 'num' : ''} ${isRedSuit(card.suit) ? 'red' : 'black'} ${court ? `court court-${court}` : ''} ${card.rank === 'A' ? 'ace' : ''} ${className}`} style={style}>
+      {court && (kingArt ? <img className="art" src="/art/king-spades-art.webp" alt="" draggable={false} /> : <CourtArt rank={court} suit={card.suit} />)}
+      <span className="corner">{index}</span>
+      <span className="corner br" aria-hidden="true">
+        {index}
       </span>
       <SuitIcon suit={card.suit} className="pip" />
-      {tag && <span className={`tag ${tag.danger ? 'danger' : ''}`}>{tag.text}</span>}
+      {PIP_LAYOUT[card.rank] && (
+        <span className="pips" aria-hidden="true">
+          {PIP_LAYOUT[card.rank].map(([x, y], i) => (
+            <svg key={i} viewBox="0 0 24 24" className={y > 0.5 ? 'flip' : ''} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} fill="currentColor" focusable="false">
+              {SUIT_PATH[card.suit]}
+            </svg>
+          ))}
+        </span>
+      )}
+      {tag && <span className={`tag ${tag.danger ? 'danger' : ''}`} data-tag={tag.text}>{tag.text}</span>}
     </div>
   );
 }
 
 export function CardBack({ className = '', style }: { className?: string; style?: CSSProperties }) {
   return (
-    <div className={`card back ${className}`} style={style} aria-hidden="true">
-      <span className="back-frame">
-        <SuitIcon suit="S" />
-      </span>
-    </div>
+    <div className={`card back ${className}`} style={style} aria-hidden="true" />
   );
 }
 
@@ -70,8 +97,14 @@ export function CardBack({ className = '', style }: { className?: string; style?
 
 export function Avatar({ avatar, size = 44, className = '' }: { avatar: AvatarT; size?: number; className?: string }) {
   return (
-    <span className={`avatar ${className}`} style={{ background: avatar.color, width: size, height: size, fontSize: size * 0.54 }} aria-hidden="true">
-      {avatar.emoji ?? (avatar.icon ? avatar.icon[0].toUpperCase() : '?')}
+    <span className={`avatar ${className}`} style={{ background: avatar.color, color: markColour(avatar.color), width: size, height: size, fontSize: size * 0.54 }} aria-hidden="true">
+      {avatar.icon && AVATAR_ICON_ART[avatar.icon] ? (
+        <svg viewBox="0 0 24 24" fill="currentColor" width="58%" height="58%" focusable="false">
+          {AVATAR_ICON_ART[avatar.icon]}
+        </svg>
+      ) : (
+        (avatar.emoji ?? (avatar.icon ? avatar.icon[0].toUpperCase() : '?'))
+      )}
     </span>
   );
 }
@@ -82,7 +115,7 @@ export function Avatar({ avatar, size = 44, className = '' }: { avatar: AvatarT;
 export function LogoTile({ className = '' }: { className?: string }) {
   return (
     <span className={`logo-tile ${className}`}>
-      <img src="/logo-mark-black.png" alt="Crypto Jakk" width={709} height={405} />
+      <img src="/logo-white.png" alt="Crypto Jakk" width={900} height={646} />
     </span>
   );
 }
@@ -90,7 +123,7 @@ export function Logo({ className = '' }: { className?: string }) {
   return <LogoTile className={className} />;
 }
 
-export function Sheet({ open, onClose, title, children, tall = false }: { open: boolean; onClose: () => void; title: string; children: ReactNode; tall?: boolean }) {
+export function Sheet({ open, onClose, title, children, tall = false, variant }: { open: boolean; onClose: () => void; title: string; children: ReactNode; tall?: boolean; variant?: 'menu' }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -123,6 +156,35 @@ export function Sheet({ open, onClose, title, children, tall = false }: { open: 
     };
   }, [open, onClose]);
   if (!open) return null;
+  if (variant === 'menu') {
+    // Site menu: ivory card-stock panel with a green suit rail down the left, logo, slab-serif title.
+    return (
+      <div className="sheet-wrap" onClick={onClose}>
+        <div ref={ref} tabIndex={-1} className="sheet menu-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+          <div className="menu-paper" aria-hidden="true">
+            <div />
+          </div>
+          <div className="menu-rail" aria-hidden="true">
+            {(['S', 'H', 'D', 'C'] as const).map((su) => (
+              <svg key={su} viewBox="0 0 24 24" focusable="false">
+                {SUIT_PATH[su]}
+              </svg>
+            ))}
+          </div>
+          <div className="menu-main">
+            <button className="menu-close" onClick={onClose} aria-label="Close">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+            <img className="menu-logo" src="/logo-black.png" alt="" width={900} height={646} />
+            <h2>{title}</h2>
+            <div className="sheet-body">{children}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="sheet-wrap" onClick={onClose}>
       <div ref={ref} tabIndex={-1} className={`sheet ${tall ? 'tall' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
@@ -354,85 +416,27 @@ export function Icon({ name, className = '' }: { name: keyof typeof ICONS | stri
 
 // ------------------------------------------------------------------ casino chips (decoration only)
 
-/** Shared gradients for every chip. Rendered once at the app root. */
-export function ChipDefs() {
-  return (
-    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
-      <defs>
-        <linearGradient id="cj-red-top" x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0" stopColor="#ef4a47" />
-          <stop offset="1" stopColor="#a5141b" />
-        </linearGradient>
-        <linearGradient id="cj-red-side" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#6d0a10" />
-          <stop offset="0.45" stopColor="#c01f27" />
-          <stop offset="1" stopColor="#5a070c" />
-        </linearGradient>
-        <linearGradient id="cj-black-top" x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0" stopColor="#4a504d" />
-          <stop offset="1" stopColor="#101312" />
-        </linearGradient>
-        <linearGradient id="cj-black-side" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#050606" />
-          <stop offset="0.45" stopColor="#3a3f3d" />
-          <stop offset="1" stopColor="#040505" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-const CRX = 92;
-const CRY = 33;
-const CH = 15;
-
-/** A stack of `n` chips seen from slightly above: coloured top, edge inserts, inner ring, shaded side. */
-export function ChipStack({ color = 'red', n = 5, className = '', style }: { color?: 'red' | 'black'; n?: number; className?: string; style?: CSSProperties }) {
-  const uid = useId().replace(/:/g, '');
-  const H = CRY * 2 + 12 + n * CH;
-  const cx = 100;
-  const stripes = [24, 58, 90, 122, 156].map((deg) => {
-    const t = (deg * Math.PI) / 180;
-    return { x: cx - CRX * Math.cos(t), y: CRY * Math.sin(t), w: 4 + 13 * Math.sin(t) };
-  });
-  const chips = [];
-  for (let i = 0; i < n; i++) {
-    const cy = 6 + CRY + (n - 1 - i) * CH;
-    chips.push(
-      <g key={i}>
-        <clipPath id={`${uid}c${i}`}>
-          <path d={`M${cx - CRX} ${cy} a${CRX} ${CRY} 0 0 0 ${CRX * 2} 0 v${CH} a${CRX} ${CRY} 0 0 1 ${-CRX * 2} 0z`} />
-        </clipPath>
-        <path d={`M${cx - CRX} ${cy} a${CRX} ${CRY} 0 0 0 ${CRX * 2} 0 v${CH} a${CRX} ${CRY} 0 0 1 ${-CRX * 2} 0z`} fill={`url(#cj-${color}-side)`} />
-        <g clipPath={`url(#${uid}c${i})`}>
-          {stripes.map((st, k) => (
-            <rect key={k} x={st.x - st.w / 2} y={cy + st.y - 1} width={st.w} height={CH + 2} fill="#f6efe2" opacity="0.96" />
-          ))}
-          <rect x="0" y={cy + CRY} width="200" height={CH} fill="#000" opacity="0.1" />
-        </g>
-        <ellipse cx={cx} cy={cy} rx={CRX} ry={CRY} fill={`url(#cj-${color}-top)`} />
-        <ellipse cx={cx} cy={cy} rx={CRX - 5} ry={CRY - 2} fill="none" stroke="#f6efe2" strokeWidth="7" strokeDasharray="21 29" opacity="0.96" />
-        <ellipse cx={cx} cy={cy} rx={CRX - 1} ry={CRY - 0.5} fill="none" stroke="#000" strokeOpacity="0.25" strokeWidth="1.5" />
-        <ellipse cx={cx} cy={cy} rx={CRX * 0.66} ry={CRY * 0.66} fill="none" stroke="#f6efe2" strokeWidth="2" opacity="0.9" />
-        <ellipse cx={cx} cy={cy} rx={CRX * 0.6} ry={CRY * 0.6} fill="#000" fillOpacity="0.14" />
-      </g>,
-    );
-  }
-  return (
-    <svg viewBox={`0 0 200 ${H}`} className={`chip-stack ${className}`} style={style} aria-hidden="true" focusable="false">
-      {chips}
-    </svg>
-  );
+/** A photographed stack of casino chips: five red or three black. */
+export function ChipStack({ color = 'red', className = '', style }: { color?: 'red' | 'black'; className?: string; style?: CSSProperties }) {
+  return <img src={`/art/chips-${color}.webp`} alt="" className={`chip-stack ${className}`} style={style} aria-hidden="true" draggable={false} />;
 }
 
 /** A drifting group of chip stacks pinned to the edges of a screen. Pure decoration. */
 export function DecoChips({ variant = 'bottom' }: { variant?: 'bottom' | 'corners' | 'sides' | 'table' }) {
+  if (variant === 'sides') {
+    return (
+      <div className="deco deco-sides" aria-hidden="true">
+        <img src="/art/chips-group.webp" alt="" className="chip-group l" draggable={false} />
+        <img src="/art/chips-group.webp" alt="" className="chip-group r" draggable={false} />
+      </div>
+    );
+  }
   return (
     <div className={`deco deco-${variant}`} aria-hidden="true">
-      <ChipStack color="red" n={6} className="d1" />
-      <ChipStack color="black" n={4} className="d2" />
-      <ChipStack color="red" n={3} className="d3" />
-      <ChipStack color="black" n={5} className="d4" />
+      <ChipStack color="red" className="d1" />
+      <ChipStack color="black" className="d2" />
+      <ChipStack color="red" className="d3" />
+      <ChipStack color="black" className="d4" />
     </div>
   );
 }
@@ -481,9 +485,10 @@ export function AppHeader({
       <header className={`hdr ${className}`}>
         <div className="hdr-l">{onBack ? <BackButton onClick={onBack} label={backLabel} /> : (left ?? <span className="hdr-sp" />)}</div>
         {inGame ? (
-          <span className="hdr-logo">
+          // In a room the logo still leads home, but through the screen's leave flow (which confirms mid-game).
+          <button type="button" className="hdr-logo" aria-label="Crypto Jakk home. Leave this game" onClick={() => (onLeave ? onLeave() : navigate('/'))}>
             <LogoTile />
-          </span>
+          </button>
         ) : (
           <a className="hdr-logo" href="/" aria-label="Crypto Jakk home" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
             <LogoTile />
@@ -497,7 +502,7 @@ export function AppHeader({
           </button>
         </div>
       </header>
-      <Sheet open={open} onClose={() => setOpen(false)} title="Menu">
+      <Sheet open={open} onClose={() => setOpen(false)} title="Menu" variant="menu">
         <div className="rows">
           <button
             className="row"

@@ -12,14 +12,13 @@ import {
   previewPlay,
 } from '@shared/engine';
 import type { LobbyPlayer } from '@shared/protocol';
-import { AppHeader, Avatar, CardBack, CardFace, DecoChips, Icon, KeyList, Kbd, Sheet, SuitIcon, cardName, useMedia, useMuted } from './components';
-import { TableArc } from './Screens';
+import { AppHeader, Avatar, CardBack, CardFace, Icon, KeyList, Kbd, Sheet, SuitIcon, cardName, useMedia } from './components';
 import { InviteActions } from './Lobby';
 import { HowToPlayContent } from './HowToPlay';
 import { Results } from './Results';
 import { act, leaveRoom, useApp, type Flight } from './store';
 import { removeFlight } from './fx';
-import { playSfx, setMuted, unlockAudio } from './sound';
+import { playSfx, unlockAudio } from './sound';
 
 const RANK_ORDER = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUIT_ORDER: Suit[] = ['S', 'H', 'C', 'D'];
@@ -72,31 +71,67 @@ function FlightLayer() {
 // ------------------------------------------------------------------ seats
 
 function Seat({ player, count, active, jakk, dealing, slot }: { player: LobbyPlayer; count: number; active: boolean; jakk: boolean; dealing: boolean; slot: string }) {
-  const shown = Math.min(count, 6);
+  const shown = Math.min(count, 8);
+  const away = !player.connected && !player.isBot;
   return (
-    <div className={`seat ${active ? 'active' : ''} ${!player.connected && !player.isBot ? 'away' : ''}`} data-anchor={`seat-${player.playerId}`} data-testid={`seat-${player.playerId}`} data-slot={slot}>
-      <div className="seat-top">
-        <Avatar avatar={player.avatar} size={40} className="seat-avatar" />
-        <div className="seat-info">
-          <span className="seat-name">{player.name}</span>
-          <span className="seat-meta">
-            {player.isBot && <i className="mark">BOT</i>}
-            {!player.connected && !player.isBot && <i className="mark off">OFFLINE</i>}
-            {active && <i className="mark think">turn</i>}
-          </span>
-        </div>
-      </div>
-      <div className="seat-cards" aria-label={`${player.name} has ${count} cards`}>
-        <div className="fan" aria-hidden="true" style={{ ['--n' as string]: shown } as CSSProperties}>
-          {Array.from({ length: shown }, (_, i) => (
-            <CardBack key={i} className={dealing ? 'deal-in' : ''} style={{ ['--i' as string]: i, ['--n' as string]: shown, ['--cw' as string]: 'var(--seat-cw, 24px)' } as CSSProperties} />
-          ))}
-        </div>
-        <span className="count" data-count={count}>
+    <div className={`gt-seat ${active ? 'active' : ''} ${away ? 'away' : ''}`} data-anchor={`seat-${player.playerId}`} data-testid={`seat-${player.playerId}`} data-slot={slot} style={{ ['--n' as string]: shown } as CSSProperties}>
+      <div className="gt-plate">
+        <Avatar avatar={player.avatar} size={38} className="gt-avatar" />
+        <span className="gt-name">
+          {player.name}
+          {player.isBot && <small> (BOT)</small>}
+          {away && <small className="off"> OFFLINE</small>}
+        </span>
+        <span className="gt-count" data-count={count}>
           {count}
         </span>
         {jakk && <span className="jakk-badge">JAKK!</span>}
       </div>
+      <div className="gt-fan" aria-label={`${player.name} has ${count} cards`} style={{ ['--n' as string]: shown } as CSSProperties}>
+        {Array.from({ length: shown }, (_, i) => (
+          <CardBack key={i} className={dealing ? 'deal-in' : ''} style={{ ['--i' as string]: i } as CSSProperties} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The table's frame: a charcoal panel with concave (scooped) corners and a double emerald border, drawn as SVG
+ * so the corners stay true circles at any size.
+ */
+function TableFrame() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    setBox({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+  const { w, h } = box;
+  const r = Math.max(24, Math.min(64, Math.round(Math.min(w, h) * 0.085)));
+  const path = (i: number) => {
+    const R = Math.max(4, r - i);
+    return `M${R + i} ${i}H${w - R - i}A${R} ${R} 0 0 0 ${w - i} ${R + i}V${h - R - i}A${R} ${R} 0 0 0 ${w - R - i} ${h - i}H${R + i}A${R} ${R} 0 0 0 ${i} ${h - R - i}V${R + i}A${R} ${R} 0 0 0 ${R + i} ${i}Z`;
+  };
+  return (
+    <div className="gt-frame" ref={ref} aria-hidden="true">
+      {w > 0 && (
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+          <defs>
+            <radialGradient id="gt-felt" cx="50%" cy="45%" r="70%">
+              <stop offset="0" stopColor="#15271f" />
+              <stop offset="0.75" stopColor="#081511" />
+              <stop offset="1" stopColor="#050f0b" />
+            </radialGradient>
+          </defs>
+          <path d={path(1)} fill="url(#gt-felt)" stroke="#1a9a62" strokeWidth="2" />
+          <path d={path(7)} fill="none" stroke="#4ee3a1" strokeOpacity="0.55" strokeWidth="1" />
+        </svg>
+      )}
     </div>
   );
 }
@@ -118,13 +153,14 @@ interface HandCardProps {
   fresh: number | undefined;
   dealing: boolean;
   view: PlayerView;
+  rot?: number;
   onTap: (c: Card) => void;
 }
 
-function HandCard({ card, index, left, top, z, legal, dim, selected, order, shake, hint, fresh, dealing, view, onTap }: HandCardProps) {
+function HandCard({ card, index, left, top, z, legal, dim, selected, order, shake, hint, fresh, dealing, view, rot = 0, onTap }: HandCardProps) {
   const label = `${cardName(card)}${selected ? `, selected, play order ${order}` : legal ? ', playable' : dim ? ', not playable' : ''}`;
   const cls = ['hc', legal ? 'legal' : '', dim ? 'dim' : '', selected ? 'selected' : '', shake ? 'shake' : '', fresh !== undefined ? 'fresh' : '', dealing ? 'dealt' : ''].filter(Boolean).join(' ');
-  const style: CSSProperties = { left, top, zIndex: selected ? 200 : z, ['--i' as string]: index, ['--d' as string]: `${fresh ?? 0}ms` };
+  const style: CSSProperties = { left, top, zIndex: selected ? 200 : z, rotate: rot ? `${rot.toFixed(2)}deg` : undefined, ['--i' as string]: index, ['--d' as string]: `${fresh ?? 0}ms` };
   return (
     <button className={cls} style={style} data-hand-card={card.id} data-legal={legal ? 'true' : 'false'} data-selected={selected ? 'true' : 'false'} aria-label={label} aria-pressed={selected} onClick={() => onTap(card)}>
       <CardFace card={card} rules={view.rules} />
@@ -149,7 +185,6 @@ export function Table() {
   const [shake, setShake] = useState<{ id: string; n: number } | null>(null);
   const [handW, setHandW] = useState(360);
   const handRef = useRef<HTMLDivElement>(null);
-  const muted = useMuted();
   const [showResults, setShowResults] = useState(false);
   const [suitHl, setSuitHl] = useState(0);
   const [kbd, setKbd] = useState(false);
@@ -316,29 +351,30 @@ export function Table() {
     else say(handCount <= 2 ? 'Select the card that leaves you on one card' : 'JAKK is for when you are down to one card');
   }
 
-  // ---- hand geometry
-  const pad = 10;
+  // ---- hand geometry: thin flat cards with a light overlap; phones fan them on a gentle arc
+  // phones fan the hand, which pushes the end cards outwards, so leave extra room at the sides
+  const pad = isTab ? 8 : 18;
   const avail = Math.max(200, handW - pad * 2);
-  // Phone keeps its original numbers. Tablet and desktop get bigger cards and less overlap.
   const cw = isDesk
-    ? Math.max(64, Math.min(124, Math.round(vh * 0.115)))
+    ? Math.max(64, Math.min(100, Math.round(vh * 0.096)))
     : isTab
-      ? Math.max(78, Math.min(120, Math.round(handW * 0.14)))
-      : Math.max(50, Math.min(92, Math.round(handW * 0.21)));
-  const ch = Math.round(cw * 1.42);
+      ? Math.max(66, Math.min(100, Math.round(handW * 0.13)))
+      : Math.max(46, Math.min(78, Math.round(handW * 0.165)));
+  const ch = Math.round(cw * 1.565);
   const n = sorted.length;
-  const idealStep = cw * (isDesk ? 0.8 : isTab ? 0.7 : 0.62);
+  const idealStep = cw * (isDesk ? 1.0 : isTab ? 0.92 : 0.9);
   const fit1 = n <= 1 ? idealStep : (avail - cw) / (n - 1);
-  const minStep = cw * (isDesk ? 0.2 : 0.3);
+  const minStep = cw * (isDesk ? 0.22 : 0.32);
   const rows = !isDesk && fit1 < minStep * 1.02 ? 2 : 1;
   const perRow = Math.ceil(n / rows);
   const step = Math.max(minStep, Math.min(idealStep, perRow <= 1 ? idealStep : (avail - cw) / (perRow - 1)));
   const rowW = cw + (perRow - 1) * step;
   const innerW = Math.max(handW, rowW + pad * 2);
   const left0 = (innerW - rowW) / 2;
-  const lift = isDesk ? 44 : 36;
+  const arc = !isTab && rows === 1 ? 1 : 0;
+  const lift = isDesk ? 30 : 26;
   const rowGap = Math.round(ch * 0.52);
-  const handH = lift + ch + (rows - 1) * rowGap + 6;
+  const handH = lift + ch + (rows - 1) * rowGap + (arc ? Math.round(cw * 0.22) : 0) + 6;
 
   const dealingCls = dealing ? 'dealing' : '';
   const others = (() => {
@@ -484,64 +520,56 @@ export function Table() {
     { id: 'AS', title: 'Ace', text: 'Wild: name a suit', full: 'Play it on anything (except a penalty) and name the next suit.' },
   ];
 
+  const dirLabel = view.direction === 1 ? 'Play is clockwise' : 'Play is reversed';
   return (
-    <div className={`screen table-screen ${dealingCls} ${myTurn ? 'my-turn' : ''} ${kbd ? 'kbd-on' : ''}`} data-testid="table" data-turn={myTurn ? 'me' : 'other'} data-version={view.version} data-dir={view.direction} data-opps={others.length}>
+    <div className={`screen gt-screen ${dealingCls} ${myTurn ? 'my-turn' : ''} ${kbd ? 'kbd-on' : ''}`} data-testid="table" data-turn={myTurn ? 'me' : 'other'} data-version={view.version} data-dir={view.direction} data-opps={others.length}>
       <AppHeader
-        className="table-top"
+        className="gt-hdr"
         inGame
         onLeave={() => setConfirmLeave(true)}
         onRules={() => setRulesOpen(true)}
         menuOpen={menuOpen}
         onMenuOpen={setMenuOpen}
         left={
-          <span className="mode-chip" aria-label={modeLabel}>
+          <span className="gt-mode" aria-label={modeLabel}>
+            <img className="gt-mode-ico" src={room.mode === 'friends' ? '/art/icon-users.webp' : '/art/icon-robot.webp'} alt="" width="28" height="28" draggable={false} />
             {modeLabel}
           </span>
         }
         extra={
           <>
-            <button className="hdr-btn hdr-extra" aria-label="How to play" title="How to play (?)" onClick={() => setRulesOpen(true)}>
+            <button className="hdr-btn gt-icon" aria-label="How to play" title="How to play (?)" onClick={() => setRulesOpen(true)}>
               <Icon name="help" />
-            </button>
-            <button className="hdr-btn hdr-extra" aria-label={muted ? 'Sound off. Turn sound on' : 'Sound on. Turn sound off'} onClick={() => setMuted(!muted)}>
-              <Icon name={muted ? 'mute' : 'sound'} />
             </button>
           </>
         }
       />
 
-      <div className="stage">
-        <section className="seats" aria-label="Opponents" data-n={others.length}>
+      <div className="gt-body">
+        <section className="gt-seats" aria-label="Opponents" data-n={others.length}>
           {others.map((p, i) => (
             <Seat key={p.playerId} player={p} slot={slots[i]} count={view.handCounts[p.playerId] ?? 0} active={view.turn === p.playerId && !view.winner} jakk={(view.handCounts[p.playerId] ?? 0) === 1} dealing={dealing} />
           ))}
         </section>
 
-        <section className="centre" aria-label="Table">
-          <TableArc />
-          <div className="dir" data-dir={view.direction} aria-label={view.direction === 1 ? 'Play is clockwise' : 'Play is reversed'}>
-            <svg viewBox="0 0 320 150" className="dir-svg" aria-hidden="true">
-              <ellipse cx="160" cy="75" rx="146" ry="62" className="dir-ring" />
-              <path d="M 294 66 L 318 66 L 306 90 Z" className="dir-head" />
-              <path d="M 26 84 L 2 84 L 14 60 Z" className="dir-head" />
-            </svg>
-          </div>
-          <div className="piles">
-            <button className={`pile draw ${myTurn ? 'live' : ''}`} data-anchor="draw" data-testid="draw-pile" onClick={onDraw} aria-label={`Draw pile, ${view.drawCount} cards. ${penalty && myTurn ? `Pick up ${penalty.amount}` : 'Tap to draw'}`}>
+        <section className="gt-table" aria-label="Table">
+          <TableFrame />
+          <div className="gt-centre">
+            <span className="gt-dir l" data-dir={view.direction} aria-hidden="true" />
+            <button className={`gt-pile gt-draw ${myTurn ? 'live' : ''}`} data-anchor="draw" data-testid="draw-pile" onClick={onDraw} aria-label={`Draw pile, ${view.drawCount} cards. ${penalty && myTurn ? `Pick up ${penalty.amount}` : 'Tap to draw'}`}>
               <CardBack className="p3" />
               <CardBack className="p2" />
               <CardBack className="p1" />
-              <span className="pile-count">{view.drawCount}</span>
+              <span className="gt-pile-count">{view.drawCount}</span>
             </button>
-            <div className="suit-chip" data-testid="active-suit" data-suit={view.activeSuit} aria-label={`Active suit: ${SUIT_NAME[view.activeSuit]}`}>
-              <span className="suit-cap">SUIT</span>
-              <span className={`suit-box ${suitRed ? 'red' : 'black'}`} key={view.activeSuit}>
+            <div className="gt-suit" data-testid="active-suit" data-suit={view.activeSuit} aria-label={`Active suit: ${SUIT_NAME[view.activeSuit]}`}>
+              <span className="gt-suit-cap">SUIT</span>
+              <span className={`gt-suit-disc ${suitRed ? 'red' : 'black'}`} key={view.activeSuit}>
                 <SuitIcon suit={view.activeSuit} />
               </span>
             </div>
-            <div className="pile discard" data-anchor="discard" data-testid="discard-pile" aria-label={`Top card: ${cardName(top)}`}>
+            <div className="gt-pile gt-discard" data-anchor="discard" data-testid="discard-pile" aria-label={`Top card: ${cardName(top)}`}>
               <div className="under u1" />
-              <div className="under u2" />
               <CardFace card={top} rules={view.rules} className="top" />
               {penalty && (
                 <span className="penalty-badge" key={penalty.amount} data-testid="penalty">
@@ -549,23 +577,24 @@ export function Table() {
                 </span>
               )}
             </div>
+            <span className="gt-dir r" data-dir={view.direction} aria-label={dirLabel} role="img" />
+            {callout && (
+              <div className={`callout ${callout.kind}`} key={callout.id} aria-hidden="true">
+                {callout.text}
+              </div>
+            )}
           </div>
-          {callout && (
-            <div className={`callout ${callout.kind}`} key={callout.id} aria-hidden="true">
-              {callout.text}
-            </div>
-          )}
-        </section>
 
-        <DecoChips variant="table" />
-        <div className={`feed ${hint ? 'hint' : ''}`} aria-live="polite" data-testid="feed">
-          <span key={hint?.id ?? feed?.id ?? 0}>{feedText}</span>
-        </div>
-      </div>
-
-      <div className="hand-row">
-        <section className="hand-zone" aria-label="Your hand">
+          <p className={`gt-caption ${hint ? 'hint' : ''}`} key={hint?.id ?? 'rule'}>
+            {hint ? hint.text : 'First to empty their hand wins'}
+          </p>
+          <div className="sr-only" aria-live="polite" data-testid="feed">
+            {feedText}
+          </div>
           {turnLabel}
+
+          <div className="gt-play">
+            <section className="gt-hand" aria-label="Your hand">
           <div className="hand-scroll" ref={handRef} data-anchor="hand">
             <div className="hand" style={{ width: innerW, height: handH, ['--cw' as string]: `${cw}px` } as CSSProperties} data-testid="hand" data-count={n}>
               {sorted.map((c, i) => {
@@ -576,13 +605,16 @@ export function Table() {
                 const l = (innerW - rw) / 2 + col * step;
                 void left0;
                 const isSel = sel.includes(c.id);
+                // phones: tilt and drop outer cards a little so the hand reads as a held fan
+                const t = arc && rowCount > 1 ? (col - (rowCount - 1) / 2) / ((rowCount - 1) / 2) : 0;
                 return (
                   <HandCard
+                    rot={t * 7}
                     key={c.id}
                     card={c}
                     index={i}
                     left={l}
-                    top={lift + row * rowGap}
+                    top={lift + row * rowGap + Math.round(t * t * cw * 0.2)}
                     z={10 + row * 40 + col}
                     legal={myTurn && lit.has(c.id)}
                     dim={myTurn && !lit.has(c.id) && !isSel}
@@ -599,73 +631,85 @@ export function Table() {
               })}
             </div>
           </div>
+            </section>
+            <button className="gt-btn draw-btn" data-testid="draw-btn" onClick={onDraw} disabled={!myTurn} data-penalty={penalty && myTurn ? 'true' : 'false'} aria-keyshortcuts="D">
+              <img className="gt-btn-badge" src="/art/icon-cards.webp" alt="" width="32" height="32" draggable={false} />
+              <span>{drawLabel}</span>
+              <Kbd k="D" />
+            </button>
+            <button
+              className={`gt-btn jakk-btn ${owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : ''}`}
+              data-testid="jakk-btn"
+              data-state={owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : 'idle'}
+              onClick={onJakk}
+              disabled={!view.rules.jakkEnabled || (!owed && !armable && !(myTurn && handCount <= 3))}
+              aria-pressed={jakkArmed}
+              aria-keyshortcuts="J"
+              aria-label={owed ? 'Declare JAKK now' : jakkArmed ? 'JAKK armed. Tap to cancel' : 'JAKK'}
+            >
+              <img className="gt-btn-badge" src="/art/icon-spade.webp" alt="" width="32" height="32" draggable={false} />
+              <span>{jakkArmed ? 'JAKK ✓' : 'JAKK'}</span>
+              <Kbd k="J" />
+            </button>
+            <button className="gt-btn primary play-btn" data-testid="play-btn" onClick={onPlay} disabled={!canPlay} aria-keyshortcuts="P">
+              <img className="gt-btn-badge" src="/art/icon-bolt.webp" alt="" width="32" height="32" draggable={false} />
+              <span>Play{sel.length > 0 ? ` ${sel.length}` : ''}</span>
+              <Kbd k="P" />
+            </button>
+          </div>
         </section>
 
-        <footer className="actions">
-          <button className="pill secondary draw-btn" data-testid="draw-btn" onClick={onDraw} disabled={!myTurn} data-penalty={penalty && myTurn ? 'true' : 'false'} aria-keyshortcuts="D">
-            <span>{drawLabel}</span>
-            <Kbd k="D" />
-          </button>
-          <button
-            className={`pill danger jakk-btn ${owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : ''}`}
-            data-testid="jakk-btn"
-            data-state={owed ? 'owed' : jakkArmed ? 'armed' : armable ? 'armable' : 'idle'}
-            onClick={onJakk}
-            disabled={!view.rules.jakkEnabled || (!owed && !armable && !(myTurn && handCount <= 3))}
-            aria-pressed={jakkArmed}
-            aria-keyshortcuts="J"
-            aria-label={owed ? 'Declare JAKK now' : jakkArmed ? 'JAKK armed. Tap to cancel' : 'JAKK'}
-          >
-            {jakkArmed ? 'JAKK ✓' : 'JAKK'}
-            <Kbd k="J" />
-          </button>
-          <button className="pill primary play-btn" data-testid="play-btn" onClick={onPlay} disabled={!canPlay} aria-keyshortcuts="P">
-            <span>Play{sel.length > 0 ? ` ${sel.length}` : ''}</span>
-            <Kbd k="P" />
-          </button>
-        </footer>
+        <section className="gt-panels" aria-label="Game panels">
+          <details className="gt-panel">
+            <summary>
+              <span className="gt-tri" aria-hidden="true" />
+              <span className="gt-sum">Game Log</span>
+              <span className="gt-badge">{log.length}</span>
+              <Icon name="down" className="gt-chev" />
+            </summary>
+            <ol className="log" ref={logRef} data-testid="log">
+              {log.length === 0 && <li className="log-empty">Waiting for the first move...</li>}
+              {log.map((l, i) => (
+                <li key={l.id} className={`${l.text.startsWith('You') ? 'me' : ''} ${i === log.length - 1 ? 'new' : ''}`}>
+                  {l.text}
+                </li>
+              ))}
+            </ol>
+          </details>
+          <details className="gt-panel">
+            <summary>
+              <span className="gt-tri" aria-hidden="true" />
+              <span className="gt-sum">Power Cards Guide</span>
+              <Icon name="down" className="gt-chev" />
+            </summary>
+            <ul className="power">
+              {power.map((p) => (
+                <li key={p.id} title={p.full}>
+                  <CardFace card={{ id: p.id, rank: p.id.slice(0, -1) as Card['rank'], suit: p.id.slice(-1) as Card['suit'] }} rules={view.rules} style={{ ['--cw' as string]: '34px' }} />
+                  <span>
+                    <b>{p.title}</b>
+                    {p.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <KeyList className="gt-keys" />
+          </details>
+          {room.mode === 'friends' && (
+            <details className="gt-panel">
+              <summary>
+                <span className="gt-tri" aria-hidden="true" />
+                <span className="gt-sum">Room {room.code}</span>
+                <Icon name="down" className="gt-chev" />
+              </summary>
+              <div className="side-code" data-testid="side-room-code">
+                {room.code}
+              </div>
+              <InviteActions code={room.code} compact />
+            </details>
+          )}
+        </section>
       </div>
-
-      <aside className="side" aria-label="Game panel">
-        <section className="side-box side-log">
-          <h3 className="side-h">Game log</h3>
-          <ol className="log" ref={logRef} data-testid="log">
-            {log.length === 0 && <li className="log-empty">Waiting for the first move...</li>}
-            {log.map((l, i) => (
-              <li key={l.id} className={`${l.text.startsWith('You') ? 'me' : ''} ${i === log.length - 1 ? 'new' : ''}`}>
-                {l.text}
-              </li>
-            ))}
-          </ol>
-        </section>
-        {room.mode === 'friends' && (
-          <section className="side-box side-room">
-            <h3 className="side-h">Room</h3>
-            <div className="side-code" data-testid="side-room-code">
-              {room.code}
-            </div>
-            <InviteActions code={room.code} compact />
-          </section>
-        )}
-        <section className="side-box side-power">
-          <h3 className="side-h">Power cards</h3>
-          <ul className="power">
-            {power.map((p) => (
-              <li key={p.id} title={p.full}>
-                <CardFace card={{ id: p.id, rank: p.id.slice(0, -1) as Card['rank'], suit: p.id.slice(-1) as Card['suit'] }} rules={view.rules} style={{ ['--cw' as string]: '34px' }} />
-                <span>
-                  <b>{p.title}</b>
-                  {p.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="side-box side-keys">
-          <h3 className="side-h">Keyboard</h3>
-          <KeyList />
-        </section>
-      </aside>
 
       <FlightLayer />
 
@@ -673,8 +717,10 @@ export function Table() {
         <div className="suit-grid" data-testid="suit-picker">
           {SUITS.map((s) => (
             <button key={s} className={`suit-btn ${s === 'H' || s === 'D' ? 'red' : 'black'} ${SUITS[suitHl] === s ? 'hl' : ''}`} onClick={() => sendPlay(s)} aria-label={SUIT_NAME[s]} data-suit={s}>
-              <SuitIcon suit={s} />
-              <span>{SUIT_NAME[s]}</span>
+              <SuitIcon suit={s} className="sb-corner tl" />
+              <SuitIcon suit={s} className="sb-pip" />
+              <span className="sb-name">{SUIT_NAME[s]}</span>
+              <SuitIcon suit={s} className="sb-corner br" />
               <Kbd k={s} />
             </button>
           ))}

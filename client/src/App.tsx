@@ -1,4 +1,4 @@
-import { Banner, ChipDefs, Toast } from './components';
+import { Banner, Toast } from './components';
 import { HowToPlayPage } from './HowToPlay';
 import { Lobby } from './Lobby';
 import { useRoute, navigate } from './router';
@@ -32,7 +32,6 @@ export function App() {
   else screen = <Routed />;
   return (
     <div className="app">
-      <ChipDefs />
       <Banner />
       {screen}
       <Toast />
