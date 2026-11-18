@@ -4884,3 +4884,9 @@ button.row:active {
     display: none;
   }
 }
+@media (max-width: 600px) and (max-height: 700px) {
+  .pickup-note,
+  .opening-note {
+    display: none;
+  }
+}
