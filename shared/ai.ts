@@ -2,20 +2,26 @@
 import {
   type Card,
   type CardId,
+  type PlayOutcome,
   type PlayerAction,
   type PlayerView,
   type Suit,
   SUITS,
+  connects,
+  coversQueen,
+  getAddableCardIds,
   getLegalCardIds,
-  isBlackJack,
   isPowerRank,
   previewPlay,
 } from './engine';
 
 export interface BotOptions {
-  /** Whether this bot will declare JAKK when it leaves itself with 1 card. The SERVER rolls this (~90% true). */
+  /** Whether this bot will declare JAKK when a finish looks plausible next turn. The SERVER rolls this (~90% true). */
   declareJakk: boolean;
 }
+
+const MAX_CANDIDATES = 500;
+const MAX_DEPTH = 8;
 
 function suitCounts(cards: readonly Card[]): Record<Suit, number> {
   const c: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 };
@@ -31,102 +37,118 @@ function bestSuit(cards: readonly Card[], prefer: Suit): Suit {
   return best;
 }
 
-/** Arrange a same-rank group: a legal card first, and the card whose suit we hold most last. */
-function orderGroup(view: PlayerView, group: Card[], legal: Set<CardId>): { order: Card[]; score: number } | null {
-  const others = view.hand.filter((c) => !group.includes(c));
-  const counts = suitCounts(others);
-  let best: { order: Card[]; score: number } | null = null;
-  for (const first of group.filter((c) => legal.has(c.id))) {
-    let order: Card[];
-    if (!view.rules.multiPlay || group.length === 1) {
-      order = [first];
-    } else {
-      const rest = group.filter((c) => c !== first);
-      let last = rest[0];
-      for (const c of rest) if (counts[c.suit] > counts[last.suit]) last = c;
-      order = [first, ...rest.filter((c) => c !== last), last];
-    }
-    const score = counts[order[order.length - 1].suit];
-    if (!best || score > best.score) best = { order, score };
-  }
-  return best;
+/** Could every card of `cards` be played as one chain (in some order), ignoring the pile? Used to decide on JAKK. */
+function chainable(view: PlayerView, cards: readonly Card[]): boolean {
+  if (cards.length <= 1) return true;
+  if (cards.length > 5) return false;
+  const follows = (a: Card, b: Card) => (a.rank === 'Q' ? coversQueen(view.rules, a, b) : connects(a, b));
+  const go = (last: Card, rest: Card[]): boolean => {
+    if (rest.length === 0) return true;
+    return rest.some((c, i) => follows(last, c) && go(c, rest.filter((_, j) => j !== i)));
+  };
+  return cards.some((c, i) => go(c, cards.filter((_, j) => j !== i)));
 }
 
-function makePlay(view: PlayerView, order: Card[], opts: BotOptions): PlayerAction | null {
-  let cards = order;
-  while (cards.length > 0) {
-    const remaining = view.hand.filter((c) => !cards.includes(c));
-    const suit = cards[0].rank === 'A' ? bestSuit(remaining, view.activeSuit) : undefined;
-    const check = previewPlay(view, cards.map((c) => c.id), suit);
-    if (check.ok) {
-      const action: PlayerAction = { type: 'play', cardIds: cards.map((c) => c.id) };
-      if (suit) action.suit = suit;
-      if (remaining.length === 1) action.declareJakk = opts.declareJakk;
-      return action;
-    }
-    cards = cards.slice(0, -1);
+interface Candidate {
+  ids: CardId[];
+  suit?: Suit;
+  outcome: PlayOutcome;
+  remaining: Card[];
+  score: number;
+}
+
+function enumerate(view: PlayerView): Candidate[] {
+  const out: Candidate[] = [];
+  const byId = new Map(view.hand.map((c) => [c.id, c]));
+  const visit = (chain: CardId[]) => {
+    if (out.length >= MAX_CANDIDATES) return;
+    const cards = chain.map((id) => byId.get(id)!);
+    const remaining = view.hand.filter((c) => !chain.includes(c.id));
+    const last = cards[cards.length - 1];
+    const suit = last.rank === 'A' ? bestSuit(remaining, view.activeSuit) : undefined;
+    const check = previewPlay(view, chain, suit);
+    if (check.ok) out.push({ ids: chain, suit, outcome: check.outcome, remaining, score: 0 });
+    if (chain.length >= MAX_DEPTH) return;
+    for (const next of getAddableCardIds(view, chain)) visit([...chain, next]);
+  };
+  for (const id of getLegalCardIds(view)) visit([id]);
+  return out;
+}
+
+function nextOpponent(view: PlayerView): { id: string; count: number } | null {
+  const n = view.players.length;
+  const myIdx = view.players.indexOf(view.you);
+  for (let k = 1; k < n; k++) {
+    const id = view.players[(((myIdx + view.direction * k) % n) + n) % n];
+    if (!view.out.includes(id)) return { id, count: view.handCounts[id] };
   }
   return null;
 }
 
+function scoreCandidate(view: PlayerView, c: Candidate, threatened: boolean): number {
+  const o = c.outcome;
+  const cards = c.ids.map((id) => view.hand.find((h) => h.id === id)!);
+  const last = cards[cards.length - 1];
+  if (o.wins) return 100000 + cards.length;
+  let score = cards.length * 30;
+  if (o.blocked) score -= 400; // emptying the hand illegally: costs the cards back and the win
+  if (o.endsOnQueen && !o.blocked) score -= 250; // an uncovered Queen costs a card
+  // attacks
+  if (o.penalty) {
+    const incoming = view.penalty?.amount ?? 0;
+    if (o.penalty.amount > incoming) score += threatened ? 150 : 30;
+  }
+  if (view.penalty && o.cancelsPenalty) score += 300;
+  if (o.skips > 0) score += threatened ? 130 * o.skips : 10 * o.skips;
+  if (o.reversals % 2 === 1) score += threatened && view.players.length > 2 ? 100 : 0;
+  if (o.goAgain) score += 40;
+  // hold wild / power cards for when they matter
+  if (last.rank === 'A' && c.remaining.length > 0) score -= 40;
+  for (const card of cards) {
+    if (isPowerRank(card.rank) && !threatened && !view.penalty) score -= 8;
+    if (card.rank === 'A') score -= 8;
+  }
+  // leave the next player a suit we are strong in, keep our hand coherent
+  const counts = suitCounts(c.remaining);
+  score += counts[o.suit] * 4;
+  if (c.remaining.length > 0 && chainable(view, c.remaining)) score += 25;
+  return score;
+}
+
 /**
  * Choose what a bot should do, or null when there is nothing to do (not its turn / game over).
- * Strategy: answer penalties when able; otherwise prefer the largest same-rank set, hold Aces until
- * nothing else is playable, prefer attack/skip/reverse cards when the next opponent has <= 2 cards (and avoid leaving them a Queen),
- * nominate the most-held suit.
+ * Strategy: name a suit for an opening Ace; answer penalties (red Jack cancel first, else stack); otherwise enumerate
+ * every legal sequence (same-rank groups and runs), prefer ones that win, shed the most cards, attack/skip/reverse
+ * when the next opponent is nearly out, never end on a Queen if avoidable; declare JAKK (per bot option) when its
+ * remaining cards could plausibly finish next turn.
  */
 export function chooseBotAction(view: PlayerView, opts: BotOptions): PlayerAction | null {
-  if (view.winner || view.turn !== view.you) return null;
+  if (view.handOver || view.spectator || view.turn !== view.you || view.out.includes(view.you)) return null;
+  if (view.awaitingSuit) return { type: 'chooseSuit', suit: bestSuit(view.hand, view.activeSuit) };
+
+  const declareFor = (remaining: readonly Card[]) =>
+    view.rules.jakkEnabled && opts.declareJakk && remaining.length > 0 && !view.jakk[view.you] && (remaining.length <= 2 || chainable(view, remaining));
+  const passAction = (type: 'draw' | 'takePenalty'): PlayerAction => {
+    const a: { type: 'draw' | 'takePenalty'; declareJakk?: boolean } = { type };
+    // drawing/taking leaves us with MORE cards, so a finish is only plausible with a very small hand
+    if (view.rules.jakkEnabled && opts.declareJakk && view.hand.length <= 2 && !view.jakk[view.you]) a.declareJakk = true;
+    return a;
+  };
+
   const legalIds = getLegalCardIds(view);
-  const legal = new Set(legalIds);
+  if (legalIds.length === 0) return passAction(view.penalty ? 'takePenalty' : 'draw');
 
-  if (view.hasDrawn) {
-    // playAfterDraw: play the drawn card if possible, else pass.
-    const card = view.hand.find((c) => legal.has(c.id));
-    const play = card ? makePlay(view, [card], opts) : null;
-    return play ?? { type: 'pass' };
-  }
-
-  if (view.penalty) {
-    if (legalIds.length === 0) return { type: 'takePenalty' };
-    // Prefer cancelling with red Jacks; otherwise stack on. Play every card of the answering kind.
-    const answers = view.hand.filter((c) => legal.has(c.id));
-    const reds = answers.filter((c) => c.rank === 'J' && !isBlackJack(c));
-    const pick = reds.length > 0 ? reds : answers;
-    const play = makePlay(view, pick, opts);
-    return play ?? { type: 'takePenalty' };
-  }
-
-  if (legalIds.length === 0) return { type: 'draw' };
-
-  const myIdx = view.players.indexOf(view.you);
-  const nextId = view.players[(((myIdx + view.direction) % view.players.length) + view.players.length) % view.players.length];
-  const threatened = nextId !== view.you && view.handCounts[nextId] <= 2;
-
-  const ranks = new Set(view.hand.filter((c) => legal.has(c.id)).map((c) => c.rank));
-  let best: { action: PlayerAction; score: number } | null = null;
-  for (const rank of ranks) {
-    const group = view.hand.filter((c) => c.rank === rank);
-    const arranged = orderGroup(view, group, legal);
-    if (!arranged) continue;
-    const action = makePlay(view, arranged.order, opts);
-    if (!action || action.type !== 'play') continue;
-    const played = action.cardIds.length;
-    const clears = played === view.hand.length;
-    const { skipRank, reverseRank } = view.rules;
-    // Skip and reverse both keep a threatening next opponent (<= 2 cards) from moving right away.
-    const attack = rank === '2' || (skipRank !== null && rank === skipRank) || (reverseRank !== null && rank === reverseRank) || arranged.order.some(isBlackJack);
-    // A Queen on top accepts anything: don't hand that to an opponent who is nearly out (unless it wins).
-    const gift = rank === 'Q' && view.rules.queenAcceptsAny && threatened;
-    const score =
-      (clears ? 1000 : 0) +
-      (gift ? -400 : 0) +
-      (rank === 'A' ? 0 : 500) +
-      (threatened && attack ? 200 : 0) +
-      played * 20 +
-      (isPowerRank(rank, view.rules) ? 0 : 5) +
-      arranged.score;
-    if (!best || score > best.score) best = { action, score };
-  }
-  return best ? best.action : { type: 'draw' };
+  const next = nextOpponent(view);
+  const threatened = !!next && next.count <= 2;
+  const cands = enumerate(view);
+  if (cands.length === 0) return passAction(view.penalty ? 'takePenalty' : 'draw');
+  for (const c of cands) c.score = scoreCandidate(view, c, threatened);
+  cands.sort((a, b) => b.score - a.score);
+  const best = cands[0];
+  // Under a penalty, never stack when we could survive cheaply and stacking is not an attack... keep it simple: defend.
+  const action: PlayerAction = { type: 'play', cardIds: best.ids };
+  if (best.suit) action.suit = best.suit;
+  if (declareFor(best.remaining)) action.declareJakk = true;
+  return action;
 }
+

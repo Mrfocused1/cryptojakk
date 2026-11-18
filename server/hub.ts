@@ -246,7 +246,11 @@ export class Hub {
         const room = new Room(code, msg.mode, profile(), this.deps);
         this.rooms.set(code, room);
         this.playerRoom.set(pid, code);
-        if (msg.mode === 'ai') room.startAi(msg.botCount ?? 1);
+        if (msg.mode === 'ai') room.startAi(msg.botCount ?? 1, { houseRules: msg.houseRules, options: msg.options });
+        else if (msg.houseRules || msg.options) {
+          room.setOptions(pid, { houseRules: msg.houseRules, options: msg.options });
+          room.broadcastRoom();
+        }
         else room.broadcastRoom();
         return;
       }
@@ -291,6 +295,12 @@ export class Hub {
             return fail(room.removeBot(pid, msg.playerId));
           case 'startGame':
             return fail(room.start(pid));
+          case 'setOptions':
+            return fail(room.setOptions(pid, { houseRules: msg.houseRules, options: msg.options }));
+          case 'nextHand':
+            return fail(room.nextHand(pid));
+          case 'requestHistory':
+            return fail(room.sendHistory(pid));
           case 'rematch':
             return fail(room.rematch(pid));
           case 'action':

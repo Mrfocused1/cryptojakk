@@ -89,3 +89,19 @@ export function isBlackJack(card: Card): boolean {
 export function isRedJack(card: Card): boolean {
   return card.rank === 'J' && isRedSuit(card.suit);
 }
+
+/** A=1 ... K=13. Runs use this: A is adjacent to 2 only (no K-A wrap). */
+export function rankValue(rank: Rank): number {
+  return (RANKS as readonly string[]).indexOf(rank) + 1;
+}
+
+/** "7♥" */
+export function cardLabel(c: Pick<Card, 'rank' | 'suit'>): string {
+  return `${c.rank}${SUIT_SYMBOL[c.suit]}`;
+}
+
+/** Two cards connect in a sequence when they share a rank, or share a suit with ranks exactly one apart. */
+export function connects(prev: Card, next: Card): boolean {
+  if (prev.rank === next.rank) return true;
+  return prev.suit === next.suit && Math.abs(rankValue(prev.rank) - rankValue(next.rank)) === 1;
+}
