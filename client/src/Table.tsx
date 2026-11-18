@@ -372,7 +372,8 @@ export function Table() {
   const innerW = Math.max(handW, rowW + pad * 2);
   const left0 = (innerW - rowW) / 2;
   const arc = !isTab && rows === 1 ? 1 : 0;
-  const lift = isDesk ? 30 : 26;
+  // headroom above the cards: a selected card rises 22px and its order badge sits ~10px above that
+  const lift = isDesk ? 42 : 38;
   const rowGap = Math.round(ch * 0.52);
   const handH = lift + ch + (rows - 1) * rowGap + (arc ? Math.round(cw * 0.22) : 0) + 6;
 

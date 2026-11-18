@@ -1620,3 +1620,10 @@ button.hdr-logo {
 .gt-screen .card.printed {
   border-radius: calc(var(--w) * 0.075);
 }
+
+/* the hand scrolls sideways only when needed; vertically nothing may be clipped (lifted cards, order badges,
+   keyboard hints) */
+.gt-hand .hand-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
