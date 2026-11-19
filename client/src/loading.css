@@ -1,5 +1,5 @@
-/* Loading screen + LogoLoader. Transform/opacity keyframes; one 3.8 s loop:
-   hold logo 1.2 s | morph 0.7 s | hold "Loading" 1.2 s | morph 0.7 s.  Percent marks: 31.6 / 50 / 81.6 / 100. */
+/* Loading screen. Intro (once) = frame draws on, lettering rises, sheen. Loop (5 s) = hold logo 1.5 | turn 0.9 | hold "Loading" 1.7 | turn back 0.9.
+   Percent marks: 30 / 48 / 82 / 100. Only transform, opacity, stroke-dashoffset and masks animate. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -12,16 +12,19 @@
   border: 0;
 }
 .lscr {
+  --card: #f4f1e5;
+  --ink: #0a120d;
+  --glow: #00f65a;
   position: fixed;
   inset: 0;
   z-index: 60;
   height: 100dvh;
   display: grid;
-  grid-template-rows: 1fr auto 1fr;
+  grid-template-rows: 0.88fr auto 1.12fr;
   justify-items: center;
   padding: var(--safe-t) max(16px, env(safe-area-inset-right)) var(--safe-b) max(16px, env(safe-area-inset-left));
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 50%, #075b28 0%, #00351a 36%, #00170b 74%, #000b06 100%);
+  background: radial-gradient(ellipse at 50% 46%, #075b28 0%, #00351a 38%, #00170b 76%, #000b06 100%);
   opacity: 1;
   transition: opacity 0.2s ease-out;
   animation: lscrIn 0.25s ease-out both;
@@ -35,6 +38,13 @@
   opacity: 0.2;
   mix-blend-mode: soft-light;
 }
+.lscr::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(0, 8, 4, 0.55) 100%);
+}
 .lscr.leaving {
   opacity: 0;
   pointer-events: none;
@@ -44,35 +54,110 @@
     opacity: 0;
   }
 }
-.lscr-glow {
+/* ---- scene ---- */
+.lscr-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lscr-bloom {
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: min(130vw, 980px);
+  top: 46%;
+  width: min(150vw, 1100px);
   aspect-ratio: 1;
-  translate: -50% -50%;
+  margin: calc(min(150vw, 1100px) / -2) 0 0 calc(min(150vw, 1100px) / -2);
   border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(0, 246, 90, 0.3), rgba(0, 246, 90, 0.1) 45%, transparent 72%);
-  animation: wmGlow 3.8s ease-in-out infinite;
+  background: radial-gradient(closest-side, rgba(0, 246, 90, 0.26), rgba(0, 246, 90, 0.08) 48%, transparent 74%);
+  animation: bloom 13s ease-in-out infinite alternate;
+}
+@keyframes bloom {
+  from {
+    transform: translate(-7%, -4%) scale(0.92);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate(6%, 5%) scale(1.08);
+    opacity: 1;
+  }
+}
+.pip {
+  position: absolute;
+  fill: #b9ffd1;
+  animation: drift var(--t) ease-in-out infinite alternate;
+}
+@keyframes drift {
+  from {
+    transform: translate(0, 0) rotate(calc(var(--k) * -14deg));
+  }
+  to {
+    transform: translate(calc(var(--k) * 16px), -26px) rotate(calc(var(--k) * 16deg));
+  }
 }
 .lscr-mid {
   grid-row: 2;
   position: relative;
-  font-size: clamp(2.4rem, min(11.8vw, 17vh), 7.2rem);
-  line-height: 0;
+  z-index: 1;
+  width: min(92vw, 700px, calc((100dvh - 11rem) / 0.72));
+  min-width: 240px;
+}
+.lg-par {
+  position: relative;
+  perspective: 900px;
+  --px: 0;
+  --py: 0;
+}
+.lg-breathe {
+  transform-origin: 50% 50%;
+  transform: rotateX(calc(var(--py) * -2.2deg)) rotateY(calc(var(--px) * 2.8deg));
+  transition: transform 0.6s ease-out;
+}
+.lg-breathe > svg {
+  animation: breathe 6s ease-in-out infinite alternate;
+}
+@keyframes breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.014);
+  }
+}
+.lg-shadow {
+  position: absolute;
+  left: 8%;
+  right: 4%;
+  bottom: 2%;
+  height: 22%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), transparent);
+  transform: translateY(32%);
+}
+.lg-floor {
+  position: absolute;
+  left: 4%;
+  right: 0;
+  bottom: -3%;
+  height: 26%;
+  background: radial-gradient(closest-side, rgba(0, 246, 90, 0.2), transparent 72%);
+  transform: translateY(40%) scaleY(0.6);
+}
+@media (max-height: 520px) {
+  .lscr {
+    grid-template-rows: 0.3fr auto 1.7fr;
+  }
 }
 .lscr-low {
   grid-row: 3;
   position: relative;
+  z-index: 1;
   align-self: start;
-  padding-top: 1.6rem;
+  padding-top: clamp(0.9rem, 3.2dvh, 2.2rem);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1.1rem;
   text-align: center;
-  min-height: 7rem;
+  min-height: 0;
 }
 .lscr-live {
   min-height: 1.4em;
@@ -87,252 +172,429 @@
 .lscr-btn {
   animation: lscrIn 0.5s ease-out both;
 }
-.lscr.nofont .wm {
+
+/* ---- lockup ---- */
+.lg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.lg .card {
+  fill: var(--card);
+  animation: cardIn 0.5s ease-out 0.95s both;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+  }
+}
+.lg .ink {
+  fill: var(--ink);
+  fill-rule: evenodd;
+}
+.lg .ink use,
+.lg .ink path {
+  fill-rule: evenodd;
+}
+/* frame: a visible stroked centre-line draws on (plain stroke-dashoffset, no mask), then hands over to the traced fill */
+.lg .fill {
+  animation: fillIn 0.35s ease-in-out 1.4s backwards;
+}
+@keyframes fillIn {
+  from {
+    opacity: 0;
+  }
+}
+.lg .draw {
+  animation: strokeOut 0.35s ease-in-out 1.4s forwards;
+}
+@keyframes strokeOut {
+  to {
+    opacity: 0;
+  }
+}
+.lg .dr {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1 3;
+  stroke-dashoffset: 0;
+}
+.lg .dr0 {
+  stroke-width: 26;
+  animation: draw 0.9s cubic-bezier(0.55, 0, 0.35, 1) 0.05s backwards;
+}
+.lg .dr1 {
+  stroke-width: 17;
+  animation: draw 0.55s cubic-bezier(0.4, 0, 0.3, 1) 0.8s backwards;
+}
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1.02;
+  }
+}
+.lg .glint path {
+  fill: none;
+  stroke: #9dffc1;
+  stroke-width: 14;
+  stroke-linecap: round;
+  stroke-dasharray: 0.03 3;
+  stroke-dashoffset: -2;
   opacity: 0;
 }
-
-/* ---- wordmark ---- */
-.lj-mini {
-  display: inline-block;
-  line-height: 0;
-  vertical-align: middle;
+.lg .gl0 {
+  animation: glint 0.9s cubic-bezier(0.55, 0, 0.35, 1) 0.05s backwards;
 }
-.wm {
-  position: relative;
-  display: block;
-  width: 6.5em;
-  height: 1.9em;
-  margin: 0 auto;
-  font: italic 900 1em/1 var(--display);
-  letter-spacing: -0.035em;
-  color: #fff;
-  perspective: 40em;
-  transition: opacity 0.25s;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0.05em, #000 0.32em, #000 1.62em, transparent 1.88em);
-  mask-image: linear-gradient(to bottom, transparent 0.05em, #000 0.32em, #000 1.62em, transparent 1.88em);
+.lg .gl1 {
+  animation: glint 0.55s cubic-bezier(0.4, 0, 0.3, 1) 0.8s backwards;
 }
-.wm .g,
-.wm-layer .g {
-  position: absolute;
-  left: var(--x);
-  top: 0.45em;
-  white-space: pre;
-}
-.wm .sp,
-.wm-layer .sp {
-  position: absolute;
-  left: var(--x);
-  top: 0.58em;
-  width: 0.76em;
-  height: 0.8em;
-  color: #fff;
-}
-.wm .tit {
-  position: absolute;
-  top: 0.5em;
-  width: 0.26em;
-  height: 0.3em;
-  color: #00f65a;
-}
-/* text glyphs carry the shine: a gradient band shifts across them (same global position for every glyph) */
-.wm .g:not(.sp):not(.tit) {
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  -webkit-background-clip: text;
-  background-clip: text;
-  background: linear-gradient(104deg, #fff 0 44%, #c9fddc 50%, #fff 56% 100%) no-repeat -99em 0 / 14em 100%, #fff;
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-.wm .out {
-  animation: wmOut 3.8s linear var(--d) infinite both, wmShine 3.8s linear infinite both;
-}
-.wm .in {
-  animation: wmIn 3.8s linear var(--d) infinite both;
-}
-.wm .g.sh:not(.sp) {
-  animation: wmTravel 3.8s linear var(--d) infinite both, wmShine 3.8s linear infinite both;
-}
-.wm .sp.sh {
-  animation: wmSpade 3.8s linear var(--d) infinite both;
-}
-.wm .tit {
-  animation: wmTit 3.8s linear infinite both;
-}
-@keyframes wmOut {
-  0%,
-  31.6% {
-    opacity: 1;
-    transform: none;
-    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.4);
-  }
-  39.3%,
-  59.9% {
+@keyframes glint {
+  0% {
+    stroke-dashoffset: 0.05;
     opacity: 0;
-    transform: translateY(-0.5em);
   }
-  60%,
-  90.8% {
-    opacity: 0;
-    transform: translateY(0.5em);
-    animation-timing-function: cubic-bezier(0.1, 0.6, 0.3, 1);
-  }
-  100% {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes wmIn {
-  0%,
-  40.8% {
-    opacity: 0;
-    transform: translateY(0.5em);
-    animation-timing-function: cubic-bezier(0.1, 0.6, 0.3, 1);
-  }
-  50%,
-  81.6% {
-    opacity: 1;
-    transform: none;
-    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.4);
-  }
-  89.3% {
-    opacity: 0;
-    transform: translateY(-0.5em);
-  }
-  89.4%,
-  100% {
-    opacity: 0;
-    transform: translateY(0.5em);
-  }
-}
-@keyframes wmTravel {
-  0%,
-  35% {
-    transform: none;
-    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
-  }
-  48.2%,
-  85% {
-    transform: translateX(var(--dx));
-    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
-  }
-  98.2%,
-  100% {
-    transform: none;
-  }
-}
-@keyframes wmSpade {
-  0%,
-  35% {
-    transform: translateX(0) rotateY(0deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
-  }
-  48.2%,
-  85% {
-    transform: translateX(var(--dx)) rotateY(180deg);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
-  }
-  98.2%,
-  100% {
-    transform: translateX(0) rotateY(0deg);
-  }
-}
-@keyframes wmShine {
-  0%,
   6% {
-    background-position: calc(-8.5em - var(--x)) 0, 0 0;
+    opacity: 1;
   }
-  26%,
+  94% {
+    opacity: 1;
+  }
   100% {
-    background-position: calc(1em - var(--x)) 0, 0 0;
+    stroke-dashoffset: -0.97;
+    opacity: 0;
   }
 }
-@keyframes wmTit {
-  0%,
-  46% {
+/* intro: letters rise and settle (no clipping) */
+.lg .intro {
+  animation: gone 0s linear var(--T) forwards;
+}
+.lg .ri,
+.lg .pop {
+  transform-origin: var(--ox) var(--oy);
+}
+.lg .ri {
+  animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) var(--i) backwards;
+}
+@keyframes rise {
+  from {
     opacity: 0;
-    transform: scale(0.2) translateY(-0.3em);
-    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1.3);
-  }
-  52%,
-  62% {
-    opacity: 1;
-    transform: none;
-    animation-timing-function: ease-in-out;
-  }
-  67% {
-    transform: scale(1.35);
-  }
-  72%,
-  81.6% {
-    opacity: 1;
-    transform: none;
-    animation-timing-function: ease-in;
-  }
-  86%,
-  100% {
-    opacity: 0;
-    transform: scale(0.2) translateY(-0.3em);
+    transform: translateY(24px) scale(0.94);
   }
 }
-@keyframes wmGlow {
-  0%,
-  35% {
-    opacity: 0.55;
-    transform: scale(0.94);
+.lg .pop {
+  animation: pop 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) var(--i) backwards;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.2) rotate(-40deg);
+    opacity: 0;
   }
-  50%,
+  55% {
+    transform: scale(1.14) rotate(7deg);
+    opacity: 1;
+  }
+  78% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+}
+@keyframes gone {
+  to {
+    visibility: hidden;
+  }
+}
+@keyframes show {
+  from {
+    visibility: hidden;
+  }
+}
+.lg .loopl {
+  animation: show 0s linear var(--T) backwards;
+}
+/* sheen: one specular sweep across the lockup right after the letters land */
+.lg .sw {
+  animation: sweep 0.9s cubic-bezier(0.45, 0, 0.3, 1) 1.9s backwards;
+}
+@keyframes sweep {
+  from {
+    transform: translateX(0) skewX(-14deg);
+  }
+  to {
+    transform: translateX(1500px) skewX(-14deg);
+  }
+}
+/* ---- loop: 6 s = hold logo 1.25 | turn 1.75 | hold "Loading" 1.25 | turn back 1.75 ----
+   Forward: logo-only letters fade (20.8-24.5%), calm beat, spade (27.5-36.7) and p->d (29.2-38.3) travel clear of each other,
+   o arcs over the top lane (32.5-45), Loading-only letters appear (41.7-48.7). Back is the mirror (70.8 ... 100). */
+.lg .lo {
+  transform-origin: var(--ox) var(--oy);
+  animation-duration: 6s;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--T) + var(--d, 0s));
+}
+.lg .out {
+  animation-name: loOut;
+}
+.lg .inn {
+  animation-name: loIn;
+}
+.lg .tp {
+  animation-name: loP;
+}
+.lg .dcl {
+  opacity: 0;
+  animation-name: loD;
+  animation-timing-function: linear;
+}
+.lg .sp {
+  animation-name: loSpade;
+}
+.lg .ax {
+  transform-origin: 0 0;
+  animation-name: loArcX;
+}
+.lg .ay {
+  animation-name: loArcY;
+}
+@keyframes loOut {
+  0%,
+  20.83% {
+    opacity: 1;
+    transform: none;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.8, 0.6);
+  }
+  24.5% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.94);
+  }
+  24.51%,
+  92.5% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  98.33%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes loIn {
+  0%,
+  41.67% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  48.67%,
+  70.83% {
+    opacity: 1;
+    transform: none;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.8, 0.6);
+  }
+  74.5% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.94);
+  }
+  74.51%,
+  100% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+}
+@keyframes loP {
+  0%,
+  29.17% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
+  }
+  38.33%,
+  83.33% {
+    transform: translate(var(--dx), var(--dy)) rotate(180deg) scale(var(--s));
+    animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
+  }
+  92.5%,
+  100% {
+    transform: none;
+  }
+  0%,
+  38.32% {
+    opacity: 1;
+  }
+  38.33%,
+  83.32% {
+    opacity: 0;
+  }
+  83.33%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes loD {
+  0%,
+  38.32% {
+    opacity: 0;
+  }
+  38.33%,
+  83.32% {
+    opacity: 1;
+  }
+  83.33%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes loSpade {
+  0%,
+  27.5% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.5, 1);
+  }
+  32.1% {
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 16px)) scale(0.03, calc((1 + var(--s)) / 2));
+    animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+  }
+  36.67%,
+  85% {
+    transform: translate(var(--dx), var(--dy)) scale(var(--s), var(--s));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.5, 1);
+  }
+  89.6% {
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 16px)) scale(0.03, calc((1 + var(--s)) / 2));
+    animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+  }
+  94.17%,
+  100% {
+    transform: none;
+  }
+}
+/* o: x and y run on separate groups with different easing, which makes the arc over the top lane */
+@keyframes loArcX {
+  0%,
+  32.5% {
+    transform: translateX(0);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.3, 1);
+  }
+  45%,
+  75.83% {
+    transform: translateX(var(--dx));
+    animation-timing-function: cubic-bezier(0.7, 0, 0.55, 1);
+  }
+  87.5%,
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes loArcY {
+  0%,
+  32.5% {
+    transform: translateY(0) scale(1);
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  }
+  35.6% {
+    transform: translateY(var(--up)) scale(0.93);
+    animation-timing-function: linear;
+  }
+  39.6% {
+    transform: translateY(var(--up)) scale(0.93);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.3, 1);
+  }
+  45%,
+  75.83% {
+    transform: translateY(var(--dy)) scale(var(--s));
+    animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1);
+  }
+  80.9% {
+    transform: translateY(var(--up)) scale(0.93);
+    animation-timing-function: linear;
+  }
+  83.9% {
+    transform: translateY(var(--up)) scale(0.93);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.5, 1);
+  }
+  87.5%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+/* activity light chasing the outline (plain stroked centre-line, pathLength 1, narrower than the ink band).
+   Heads stay in step: each layer travels head 0 -> 1.2 */
+.lg .chase {
+  animation: chaseIn 0.6s ease-out var(--T) backwards;
+}
+@keyframes chaseIn {
+  from {
+    opacity: 0;
+  }
+}
+.lg .ch {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: calc(var(--l) * 1px) 3px;
+  stroke-dashoffset: 0;
+  animation: lap 2.4s linear var(--T) infinite both, lapGlow 2.4s ease-in-out var(--T) infinite both;
+}
+.lg .glow {
+  stroke: var(--glow);
+  stroke-width: 30;
+  opacity: 0.26;
+}
+.lg .core {
+  stroke: #1dff74;
+  stroke-width: 14;
+}
+.lg .head {
+  stroke: #e2ffe9;
+  stroke-width: 8;
+}
+@keyframes lap {
+  from {
+    stroke-dashoffset: calc(var(--l) * 1px);
+  }
+  to {
+    stroke-dashoffset: calc((var(--l) - 1.2) * 1px);
+  }
+}
+@keyframes lapGlow {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  18%,
   82% {
-    opacity: 0.95;
-    transform: scale(1.06);
-  }
-  100% {
-    opacity: 0.55;
-    transform: scale(0.94);
+    opacity: 1;
   }
 }
 
-/* ---- pause while the tab is hidden ---- */
-:root[data-lj-hidden='1'] .wm .g,
-:root[data-lj-hidden='1'] .wm-layer,
-:root[data-lj-hidden='1'] .lscr-glow {
+/* pause while the tab is hidden */
+:root[data-lj-hidden='1'] .lscr *,
+:root[data-lj-hidden='1'] .lj-mini * {
   animation-play-state: paused !important;
 }
 
-/* ---- reduced motion (OS setting or the app's "reduce animation"): a slow crossfade, nothing moves ---- */
-.wm.rm .wm-layer {
-  position: absolute;
-  inset: 0;
+/* ---- reduced motion (OS setting or the app's "reduce animation"): static frame, slow crossfade, nothing moves ---- */
+.lg.rm .card {
+  animation: none;
 }
-.wm.rm .g {
-  color: #fff;
+.lg.rm .fill {
+  animation: none;
 }
-:root .wm.rm .tit {
-  animation: none !important;
-}
-.wm.rm .rm-a {
-  animation: rmA 8s ease-in-out infinite both;
-}
-.wm.rm .rm-b {
-  animation: rmB 8s ease-in-out infinite both;
-}
-:root .lscr .wm.rm .rm-a,
-:root .lj-mini .wm.rm .rm-a {
+:root .lscr .lg.rm .rm-a {
   animation: rmA 8s ease-in-out infinite both !important;
 }
-:root .lscr .wm.rm .rm-b,
-:root .lj-mini .wm.rm .rm-b {
+:root .lscr .lg.rm .rm-b {
   animation: rmB 8s ease-in-out infinite both !important;
 }
-:root[data-reduce='1'] .lscr-glow {
-  animation: none !important;
-  opacity: 0.7;
+.lscr.rm .lscr-bloom,
+.lscr.rm .pip,
+.lscr.rm .lg-breathe > svg {
+  animation: none;
 }
-@media (prefers-reduced-motion: reduce) {
-  .lscr-glow {
-    animation: none !important;
-    opacity: 0.7;
-  }
+.lscr.rm .lscr-bloom {
+  opacity: 0.85;
 }
 @keyframes rmA {
   0%,
@@ -342,9 +604,6 @@
   50%,
   88% {
     opacity: 0;
-  }
-  100% {
-    opacity: 1;
   }
 }
 @keyframes rmB {
@@ -361,13 +620,34 @@
   }
 }
 
-/* ---- inline variant takes the surrounding text colour (works on the green primary pill too) ---- */
-.lj-mini .wm .g:not(.sp):not(.tit) {
-  background: none;
-  color: currentColor;
-  -webkit-text-fill-color: currentColor;
+/* ---- compact inline loader: the spade, coin-flipping; takes the surrounding text colour ---- */
+.lj-mini {
+  display: inline-block;
+  line-height: 0;
+  vertical-align: middle;
 }
-.lj-mini .wm .sp,
-.lj-mini .wm .tit {
-  color: currentColor;
+.lj-mini svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 26;
+  stroke-linejoin: round;
+  overflow: visible;
+  transform-origin: 50% 50%;
+  animation: miniFlip 1.3s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+@keyframes miniFlip {
+  50% {
+    transform: scaleX(-1);
+  }
+}
+.lj-mini.rm svg {
+  animation: miniFade 2.4s ease-in-out infinite;
+}
+@keyframes miniFade {
+  50% {
+    opacity: 0.3;
+  }
 }
