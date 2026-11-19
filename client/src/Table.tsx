@@ -896,7 +896,13 @@ export function Table() {
             </button>
             <button className={`gt-btn primary play-btn ${preview?.costly ? 'costly' : ''}`} data-testid="play-btn" onClick={onPlay} disabled={!canPlay} aria-keyshortcuts="P">
               <img className="gt-btn-badge" src="/art/icon-bolt.webp" alt="" width="32" height="32" draggable={false} />
-              <span>{playLabel}</span>
+              <span className="gt-lbl">
+                <span className="lbl-full">{playLabel}</span>
+                <span className="lbl-short" aria-hidden="true">
+                  Play
+                  {sel.length > 0 && <b className="gt-count-pill">{sel.length}</b>}
+                </span>
+              </span>
               <Kbd k="P" />
             </button>
           </div>

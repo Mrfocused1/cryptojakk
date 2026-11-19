@@ -1782,3 +1782,89 @@ button.hdr-logo {
 .gt-btn.draw-btn[data-penalty='true'] > span {
   padding-right: 0;
 }
+
+/* ================================================================== action pills: always fit the phone row
+   Three equal pills share the row; labels never spill out. Phones use a short Play label with a count chip. */
+.gt-play .gt-btn {
+  min-width: 0;
+  overflow: hidden;
+}
+.gt-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gt-lbl .lbl-short {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.gt-count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: rgba(253, 246, 227, 0.92);
+  color: #064227;
+  font: 700 0.68rem/1 var(--display);
+  letter-spacing: 0;
+}
+@media (max-width: 600px) {
+  .gt-lbl .lbl-full {
+    display: none;
+  }
+  .gt-lbl .lbl-short {
+    display: inline-flex;
+  }
+  .gt-play {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .gt-btn,
+  .gt-btn.jakk-btn {
+    gap: 6px;
+    padding: 0 10px 0 5px !important;
+    letter-spacing: 0.1em;
+    font-size: clamp(0.68rem, 3.3vw, 0.8rem);
+  }
+  .gt-btn > span {
+    padding-right: 0;
+  }
+  .gt-btn-badge {
+    width: 28px;
+    height: 28px;
+  }
+  .gt-btn .kh {
+    display: none;
+  }
+}
+/* very narrow phones: drop the badge so the words keep their room */
+@media (max-width: 359px) {
+  .gt-btn-badge {
+    display: none;
+  }
+  .gt-btn,
+  .gt-btn.jakk-btn {
+    padding: 0 8px !important;
+    justify-content: center;
+  }
+}
+@media (max-width: 420px) {
+  .gt-btn,
+  .gt-btn.jakk-btn {
+    gap: 4px;
+    padding: 0 8px 0 4px !important;
+    letter-spacing: 0.06em;
+  }
+  .gt-btn-badge {
+    width: 24px;
+    height: 24px;
+  }
+  .gt-lbl .lbl-short {
+    gap: 4px;
+  }
+}
