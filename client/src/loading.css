@@ -123,14 +123,9 @@
   position: absolute;
   left: var(--x);
   top: 0.58em;
-  width: 0.7em;
+  width: 0.76em;
   height: 0.8em;
   color: #fff;
-  transform: skewX(-8deg);
-}
-.wm .g.sp {
-  top: 0.58em;
-  /* the skew lives on the svg; animations below use the individual translate/rotate properties */
 }
 .wm .tit {
   position: absolute;
@@ -145,7 +140,7 @@
   -webkit-text-fill-color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
-  background: linear-gradient(104deg, #fff 0 44%, #b6ffd2 50%, #fff 56% 100%) no-repeat -99em 0 / 14em 100%, #fff;
+  background: linear-gradient(104deg, #fff 0 44%, #c9fddc 50%, #fff 56% 100%) no-repeat -99em 0 / 14em 100%, #fff;
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -159,7 +154,7 @@
   animation: wmTravel 3.8s linear var(--d) infinite both, wmShine 3.8s linear infinite both;
 }
 .wm .sp.sh {
-  animation: wmTravel 3.8s linear var(--d) infinite both, wmFlip 3.8s linear var(--d) infinite both;
+  animation: wmSpade 3.8s linear var(--d) infinite both;
 }
 .wm .tit {
   animation: wmTit 3.8s linear infinite both;
@@ -226,20 +221,20 @@
     transform: none;
   }
 }
-@keyframes wmFlip {
+@keyframes wmSpade {
   0%,
   35% {
-    rotate: y 0deg;
+    transform: translateX(0) rotateY(0deg);
     animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
   }
   48.2%,
   85% {
-    rotate: y 180deg;
+    transform: translateX(var(--dx)) rotateY(180deg);
     animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
   }
   98.2%,
   100% {
-    rotate: y 0deg;
+    transform: translateX(0) rotateY(0deg);
   }
 }
 @keyframes wmShine {
@@ -312,6 +307,9 @@
 .wm.rm .g {
   color: #fff;
 }
+:root .wm.rm .tit {
+  animation: none !important;
+}
 .wm.rm .rm-a {
   animation: rmA 8s ease-in-out infinite both;
 }
@@ -326,13 +324,9 @@
 :root .lj-mini .wm.rm .rm-b {
   animation: rmB 8s ease-in-out infinite both !important;
 }
-:root .lscr .lscr-glow {
-  animation-iteration-count: infinite !important;
-}
-:root[data-reduce='1'] .lscr-glow,
-:root[data-reduce='1'] .lscr-msg,
-:root[data-reduce='1'] .lscr-btn {
-  animation-name: none !important;
+:root[data-reduce='1'] .lscr-glow {
+  animation: none !important;
+  opacity: 0.7;
 }
 @media (prefers-reduced-motion: reduce) {
   .lscr-glow {
@@ -365,4 +359,15 @@
   100% {
     opacity: 0;
   }
+}
+
+/* ---- inline variant takes the surrounding text colour (works on the green primary pill too) ---- */
+.lj-mini .wm .g:not(.sp):not(.tit) {
+  background: none;
+  color: currentColor;
+  -webkit-text-fill-color: currentColor;
+}
+.lj-mini .wm .sp,
+.lj-mini .wm .tit {
+  color: currentColor;
 }

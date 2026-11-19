@@ -39,7 +39,7 @@ const LOADING: Glyph[] = [
 // Spade "a": centre x in the logo slot and in the Loading slot.
 const SP_FROM = 4.451;
 const SP_TO = 2.419;
-const SP_W = 0.7;
+const SP_W = 0.76;
 
 const FONT_Q = ['italic 800', 'italic 900', '800', '900'];
 let fontsPromise: Promise<unknown> | null = null;
@@ -104,13 +104,13 @@ const style = (v: Record<string, string | number>) => v as CSSProperties;
 
 function Spade({ cls = '', st }: { cls?: string; st?: CSSProperties }) {
   return (
-    <svg className={cls} style={st} viewBox="3.4 1.4 17.2 21" fill="currentColor" aria-hidden="true" focusable="false">
-      {SUIT_PATH.S}
+    <svg className={cls} style={st} viewBox="2 1.4 20 21" fill="currentColor" aria-hidden="true" focusable="false">
+      <g transform="translate(1.7 0) skewX(-8)">{SUIT_PATH.S}</g>
     </svg>
   );
 }
 
-function Word({ glyphs, spadeAt, cls }: { glyphs: Glyph[]; spadeAt: number; cls: string }) {
+function Word({ glyphs, spadeAt, cls, dot = false }: { glyphs: Glyph[]; spadeAt: number; cls: string; dot?: boolean }) {
   return (
     <span className={`wm-layer ${cls}`}>
       {glyphs.map((g, i) => (
@@ -119,6 +119,7 @@ function Word({ glyphs, spadeAt, cls }: { glyphs: Glyph[]; spadeAt: number; cls:
         </span>
       ))}
       <Spade cls="sp" st={style({ '--x': em(spadeAt - SP_W / 2) })} />
+      {dot && <Spade cls="tit" st={style({ '--x': em(3.5) })} />}
     </span>
   );
 }
@@ -131,7 +132,7 @@ function Wordmark({ reduced }: { reduced: boolean }) {
     return (
       <span className="wm rm" aria-hidden="true">
         <Word glyphs={LOGO.map((g) => ({ ...g, x: g.x }))} spadeAt={SP_FROM} cls="rm-a" />
-        <Word glyphs={[LOADING[0], { c: 'o', x: 1.496, k: 'sh', d: 0 }, ...LOADING.slice(1)]} spadeAt={SP_TO} cls="rm-b" />
+        <Word glyphs={[LOADING[0], { c: 'o', x: 1.496, k: 'sh', d: 0 }, ...LOADING.slice(1)]} spadeAt={SP_TO} cls="rm-b" dot />
       </span>
     );
   }

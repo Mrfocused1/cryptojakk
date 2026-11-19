@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { Banner, ChipDefs, Toast } from './components';
+import { LoadingGate } from './Loading';
 import { HowToPlayPage } from './HowToPlay';
 import { Lobby } from './Lobby';
 import { useRoute, navigate } from './router';
@@ -6,10 +8,21 @@ import { GuestEntry, JoinFlow, Landing, PlayAI, PlayFriends, UpdateScreen } from
 import { useApp } from './store';
 import { Table } from './Table';
 
+// Dev-only preview route (tree-shaken from production builds).
+const LoadingPreview = import.meta.env.DEV ? lazy(() => import('./LoadingPreview')) : null;
+
 function Routed() {
   const route = useRoute();
   const { identity } = useApp();
   switch (route.name) {
+    case 'loading':
+      return LoadingPreview ? (
+        <Suspense fallback={null}>
+          <LoadingPreview />
+        </Suspense>
+      ) : (
+        <Landing />
+      );
     case 'how':
       return <HowToPlayPage />;
     case 'profile':
@@ -37,6 +50,7 @@ export function App() {
       <Banner />
       {screen}
       <Toast />
+      <LoadingGate />
     </div>
   );
 }

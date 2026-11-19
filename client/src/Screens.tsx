@@ -5,6 +5,7 @@ import { AppHeader, Avatar, CardBack, CardFace, DecoChips, Icon, LogoTile, ChipS
 import { AVATAR_COLORS, AVATAR_EMOJIS, type Identity, randomGuest } from './identity';
 import { navigate } from './router';
 import { readStore, writeStore } from './storage';
+import { LogoLoader } from './Loading';
 import { clearJoinError, createFriendsRoom, ensureMultiplayer, joinCode, playAI, playNow, retryMultiplayer, setIdentity, useApp } from './store';
 import { setMuted, unlockAudio } from './sound';
 import { setReduce, useReduce } from './prefs';
@@ -450,7 +451,7 @@ export function PlayFriends() {
               setTimeout(() => setBusy(false), 3000);
             }}
           >
-            {busy && conn !== 'open' ? 'Connecting...' : 'Create room'} <Icon name="next" />
+            {busy && conn !== 'open' ? <LogoLoader size={13} /> : <>Create room <Icon name="next" /></>}
           </button>
         </section>
         <div className="or">
@@ -487,7 +488,7 @@ export function PlayFriends() {
               aria-label="Room code"
             />
             <button className="pill secondary" type="submit" disabled={cleaned.length < 5 || joining} data-testid="join-btn">
-              {joining ? 'Joining...' : 'Join'}
+              {joining ? <LogoLoader size={11} /> : 'Join'}
             </button>
           </form>
           {cleaned.length === 5 && !valid && <p className="error-text">Room codes never contain 0, O, 1 or I. Double-check the code.</p>}

@@ -7,7 +7,8 @@ export type Route =
   | { name: 'how' }
   | { name: 'profile' }
   | { name: 'join'; code: string }
-  | { name: 'play' };
+  | { name: 'play' }
+  | { name: 'loading' };
 
 export function parsePath(path: string): Route {
   const p = path.replace(/\/+$/, '') || '/';
@@ -24,6 +25,9 @@ export function parsePath(path: string): Route {
       return { name: 'profile' };
     case '/play':
       return { name: 'play' };
+    case '/loading':
+      // Design preview of the loading screen: dev builds only.
+      return import.meta.env.DEV ? { name: 'loading' } : { name: 'landing' };
     default:
       return { name: 'landing' };
   }

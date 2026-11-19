@@ -144,14 +144,7 @@ export function Sheet({ open, onClose, title, children, tall = false }: { open: 
 
 export function Banner() {
   const { conn, online } = useApp();
-  // Don't flash "Connecting..." on a fast first connect.
-  const [late, setLate] = useState(false);
-  useEffect(() => {
-    setLate(false);
-    if (conn !== 'connecting') return;
-    const t = setTimeout(() => setLate(true), 900);
-    return () => clearTimeout(t);
-  }, [conn]);
+  // The first connection is covered by the loading screen (Loading.tsx), so no "Connecting..." banner here.
   let text: ReactNode = null;
   let kind = 'info';
   if (conn === 'taken') {
@@ -168,7 +161,6 @@ export function Banner() {
     kind = 'warn';
     text = "You're offline. We'll reconnect when you are back.";
   } else if (conn === 'reconnecting') text = 'Reconnecting...';
-  else if (conn === 'connecting' && late) text = 'Connecting...';
   if (!text) return null;
   return (
     <div className={`banner ${kind}`} role="status" aria-live="polite">
