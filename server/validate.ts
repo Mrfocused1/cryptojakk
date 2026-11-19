@@ -4,6 +4,7 @@ import {
   type ErrorCode,
   MAX_BOTS_AI_MODE,
   normalizeRoomCode,
+  parseOptionsInput,
   sanitizeName,
   validateAvatar,
 } from '../shared/protocol';
@@ -18,11 +19,17 @@ export function parseAction(a: unknown): PlayerAction | null {
   if (typeof a !== 'object' || a === null) return null;
   const o = a as Record<string, unknown>;
   switch (o.type) {
-    case 'draw':
-    case 'takePenalty':
-    case 'pass':
     case 'declareJakk':
-      return { type: o.type };
+      return { type: 'declareJakk' };
+    case 'draw':
+    case 'takePenalty': {
+      if (o.declareJakk !== undefined && typeof o.declareJakk !== 'boolean') return null;
+      const out: { type: 'draw' | 'takePenalty'; declareJakk?: boolean } = { type: o.type };
+      if (o.declareJakk !== undefined) out.declareJakk = o.declareJakk;
+      return out;
+    }
+    case 'chooseSuit':
+      return isSuit(o.suit) ? { type: 'chooseSuit', suit: o.suit } : null;
     case 'play': {
       if (!Array.isArray(o.cardIds) || o.cardIds.length < 1 || o.cardIds.length > 13) return null;
       if (!o.cardIds.every(isCardId)) return null;
@@ -72,12 +79,25 @@ export function parseClientMessage(raw: unknown): Parsed {
         }
         botCount = o.botCount;
       }
-      return ok({ type: 'createRoom', mode: o.mode, botCount });
+      const opts = parseOptionsInput(o.houseRules, o.options);
+      if (!opts) return bad('Invalid house rules or options', reqId, 'INVALID_OPTIONS');
+      const msg: ClientMessage = { type: 'createRoom', mode: o.mode, botCount };
+      if (opts.houseRules) msg.houseRules = opts.houseRules;
+      if (opts.options) msg.options = opts.options;
+      return ok(msg);
     }
     case 'joinRoom': {
       const code = normalizeRoomCode(o.code);
       if (!code) return bad('Room not found', reqId, 'ROOM_NOT_FOUND');
       return ok({ type: 'joinRoom', code });
+    }
+    case 'setOptions': {
+      const opts = parseOptionsInput(o.houseRules, o.options);
+      if (!opts || (!opts.houseRules && !opts.options)) return bad('Invalid house rules or options', reqId, 'INVALID_OPTIONS');
+      const msg: ClientMessage = { type: 'setOptions' };
+      if (opts.houseRules) msg.houseRules = opts.houseRules;
+      if (opts.options) msg.options = opts.options;
+      return ok(msg);
     }
     case 'setReady':
       if (typeof o.ready !== 'boolean') return bad('ready must be a boolean', reqId);
@@ -98,6 +118,8 @@ export function parseClientMessage(raw: unknown): Parsed {
     case 'addBot':
     case 'startGame':
     case 'rematch':
+    case 'nextHand':
+    case 'requestHistory':
     case 'requestState':
       return ok({ type: o.type });
     default:

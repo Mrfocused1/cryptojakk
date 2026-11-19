@@ -1,72 +1,111 @@
 import type { Rank } from './cards';
 
 /**
- * Every number / toggle of the (PROVISIONAL) rulebook lives here.
- * The server always uses DEFAULT_RULES; tests override individual fields.
+ * Every number / toggle of the rulebook lives here (see docs/RULEBOOK.md).
+ * The server always starts from DEFAULT_RULES plus the host's house rules; tests override individual fields.
  */
 export interface RulesConfig {
   minPlayers: number;
   maxPlayers: number;
   /** Cards dealt to each player. */
   handSize: number;
-  /** Allow several cards of the same rank in one turn. */
-  multiPlay: boolean;
-  /** Cards drawn when a player draws voluntarily / has no play. */
+  /** Cards drawn when a player draws (voluntarily or because they have no play). The turn then ends. */
   drawCount: number;
-  /** After a voluntary draw the player may play the drawn card (only that card) or pass. Default: turn simply ends. */
-  playAfterDraw: boolean;
-  /** Ranks that count as "power" cards (start-card burying, canFinishOnPower). */
-  powerRanks: Rank[];
-  /** If false, a play that would empty the hand with a power-rank card is rejected. */
-  canFinishOnPower: boolean;
 
   twoPenalty: number;
-  /** A 2 may be answered with 2(s). */
-  stackTwos: boolean;
-
   blackJackPenalty: number;
-  /** A black Jack may be answered with a black Jack. */
-  stackBlackJacks: boolean;
-  /** A red Jack on an active Jack penalty cancels it. */
-  redJackCancels: boolean;
-
-  /** 8 reverses direction (with 2 players: the player goes again). */
-  eightReverses: boolean;
-  /** 7 skips the next player (with 2 players: the player goes again). */
-  sevenSkips: boolean;
-  /** Ace is wild when no penalty is pending; player nominates the suit. */
-  aceWild: boolean;
-
+  /** Rank that skips one more seat per card played (2 players: the player goes again). null = no skip card. */
+  skipRank: Rank | null;
+  /** Rank that flips the direction once per card played (2 players: the player goes again). null = no reverse card. */
+  reverseRank: Rank | null;
+  /** Cards drawn when a play ends on an uncovered Queen. */
+  uncoveredQueenPenalty: number;
+  /** Cards drawn when the hand is emptied illegally (no JAKK, Queen, 2-player King/8). The player stays in. */
+  finishPenalty: number;
   jakkEnabled: boolean;
-  /** Cards drawn by a player who fails to declare JAKK in time. */
-  jakkMissPenalty: number;
+
+  // ---- house rules (host-configurable, lobby only) ----
+  /** true: any card may cover a Queen. false (strict): same suit or another Queen. */
+  flexibleQueenCover: boolean;
+  /** true: 2s and black Jacks stack on each other and a red Jack cancels any penalty. false: a 2-penalty is answered only by 2s. */
+  mixedStacking: boolean;
+  /** true: a finisher who leaves a live pickup penalty is only provisionally out until it is absorbed or comes back to them. */
+  bringBacks: boolean;
+  /** false: a play that would empty the hand ending on A, 2, 8, J or K is rejected. */
+  finishOnPower: boolean;
+  /** true: the opening discard's effect applies (as if the dealer had played it). false: it is neutral. */
+  firstCardActive: boolean;
 }
+
+export const HOUSE_RULE_KEYS = ['flexibleQueenCover', 'mixedStacking', 'bringBacks', 'finishOnPower', 'firstCardActive'] as const;
+export type HouseRuleKey = (typeof HOUSE_RULE_KEYS)[number];
+export type HouseRules = Pick<RulesConfig, HouseRuleKey>;
+
+export const HANDS_TO_WIN_OPTIONS = [1, 3, 5] as const;
+export const TURN_SECONDS_OPTIONS = [0, 20, 30, 45, 60] as const;
+
+/** Room-level options that are not engine rules. */
+export interface MatchOptions {
+  /** Hands a player must win to win the match. */
+  handsToWin: (typeof HANDS_TO_WIN_OPTIONS)[number];
+  /** 0 = no turn timer. */
+  turnSeconds: (typeof TURN_SECONDS_OPTIONS)[number];
+}
+
+export const DEFAULT_MATCH_OPTIONS: MatchOptions = { handsToWin: 1, turnSeconds: 0 };
 
 export const DEFAULT_RULES: RulesConfig = {
   minPlayers: 2,
-  maxPlayers: 4,
+  maxPlayers: 6,
   handSize: 7,
-  multiPlay: true,
   drawCount: 1,
-  playAfterDraw: false,
-  powerRanks: ['2', '7', '8', 'J', 'A'],
-  canFinishOnPower: true,
   twoPenalty: 2,
-  stackTwos: true,
   blackJackPenalty: 5,
-  stackBlackJacks: true,
-  redJackCancels: true,
-  eightReverses: true,
-  sevenSkips: true,
-  aceWild: true,
+  skipRank: '8',
+  reverseRank: 'K',
+  uncoveredQueenPenalty: 1,
+  finishPenalty: 1,
   jakkEnabled: true,
-  jakkMissPenalty: 2,
+  flexibleQueenCover: true,
+  mixedStacking: false,
+  bringBacks: false,
+  finishOnPower: true,
+  firstCardActive: false,
 };
 
 export function withRules(overrides: Partial<RulesConfig> = {}): RulesConfig {
-  return { ...DEFAULT_RULES, ...overrides, powerRanks: overrides.powerRanks ?? [...DEFAULT_RULES.powerRanks] };
+  return { ...DEFAULT_RULES, ...overrides };
 }
 
-export function isPowerRank(rank: Rank, rules: RulesConfig): boolean {
-  return rules.powerRanks.includes(rank);
+export function houseRulesOf(rules: RulesConfig): HouseRules {
+  return {
+    flexibleQueenCover: rules.flexibleQueenCover,
+    mixedStacking: rules.mixedStacking,
+    bringBacks: rules.bringBacks,
+    finishOnPower: rules.finishOnPower,
+    firstCardActive: rules.firstCardActive,
+  };
+}
+
+/** Ranks that may not be the finishing card when `finishOnPower` is off. */
+export const POWER_FINISH_RANKS: readonly Rank[] = ['A', '2', '8', 'J', 'K'];
+
+export function isPowerRank(rank: Rank): boolean {
+  return POWER_FINISH_RANKS.includes(rank);
+}
+
+/** True if `x` looks like a RulesConfig of the current version (used to discard incompatible saves). */
+export function isCurrentRules(x: unknown): x is RulesConfig {
+  if (typeof x !== 'object' || x === null) return false;
+  const r = x as Record<string, unknown>;
+  return (
+    typeof r.flexibleQueenCover === 'boolean' &&
+    typeof r.mixedStacking === 'boolean' &&
+    typeof r.bringBacks === 'boolean' &&
+    typeof r.finishOnPower === 'boolean' &&
+    typeof r.firstCardActive === 'boolean' &&
+    'skipRank' in r &&
+    'reverseRank' in r &&
+    typeof r.finishPenalty === 'number'
+  );
 }

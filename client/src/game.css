@@ -1534,9 +1534,7 @@
 .how-jakk {
   display: grid;
   grid-template-columns: auto 1fr;
-  grid-template-areas:
-    'badge title'
-    'badge text';
+  grid-template-columns: auto 1fr;
   column-gap: 16px;
   row-gap: 4px;
   align-items: center;
@@ -1549,21 +1547,22 @@
   box-shadow: inset 0 1px 0 rgba(255, 236, 190, 0.08), 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 .how-jakk-badge {
-  grid-area: badge;
+  grid-column: 1;
+  grid-row: 1 / span 3;
   align-self: start;
   width: 56px;
   height: 56px;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
 }
 .how-jakk .how-h {
-  grid-area: title;
+  grid-column: 2;
   margin: 0;
   color: #e9c977;
   font: italic 800 1.35rem/1.15 'Playfair Display', var(--serif);
   letter-spacing: 0;
 }
 .how-jakk p {
-  grid-area: text;
+  grid-column: 2;
   margin: 0;
   color: rgba(236, 240, 237, 0.88);
 }
@@ -1572,15 +1571,16 @@
 }
 @media (max-width: 600px) {
   .how-jakk {
-    grid-template-areas:
-      'badge title'
-      'text text';
     row-gap: 10px;
   }
   .how-jakk-badge {
+    grid-row: 1;
     width: 44px;
     height: 44px;
     align-self: center;
+  }
+  .how-jakk p {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1626,4 +1626,159 @@ button.hdr-logo {
 .gt-hand .hand-scroll {
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+/* ================================================================== rules v2 elements inside the redesign
+   (pickup / opening notes, preview line, dealer + wins marks, JAKK sub-label, house-rules strip) */
+.gt-screen .pickup-note,
+.gt-screen .opening-note {
+  position: static;
+  transform: none;
+  max-width: min(100%, 420px);
+  margin: 18px auto 10px;
+}
+.gt-screen .zone-head {
+  margin-bottom: 2px;
+}
+.gt-screen .zone-head .turnlabel {
+  margin-bottom: 0;
+}
+.gt-screen .preview {
+  width: min(100%, 520px);
+  margin: 6px auto 8px;
+  min-height: 0;
+  padding: 3px 10px;
+  border: 0;
+  background: none;
+  color: rgba(226, 236, 230, 0.6);
+  font-size: 0.74rem;
+}
+.gt-screen .preview b {
+  color: rgba(242, 247, 244, 0.92);
+}
+.gt-screen .preview[data-tone='jakk'] span {
+  color: #f0d58f;
+}
+/* JAKK: label and its small state line side by side inside the pill */
+.gt-btn.jakk-btn {
+  gap: 8px;
+}
+.gt-btn.jakk-btn .jakk-l {
+  flex: 1;
+  font-size: inherit;
+  text-align: center;
+}
+.gt-btn.jakk-btn .jakk-sub {
+  display: none;
+}
+.gt-btn.jakk-btn.declared,
+.gt-btn.jakk-btn.armed {
+  border-color: rgba(240, 213, 143, 0.6);
+  background: linear-gradient(180deg, rgba(15, 110, 66, 0.75), rgba(6, 66, 39, 0.75));
+  color: #fdf6e3;
+}
+.gt-btn.jakk-btn.arm,
+.gt-btn.jakk-btn.available {
+  border-color: rgba(240, 213, 143, 0.4);
+}
+.gt-btn.play-btn.costly {
+  border-color: rgba(255, 155, 155, 0.6);
+}
+/* small marks beside the opponent tag */
+.gt-mark {
+  flex: none;
+  font: 600 0.62rem/1 var(--display);
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(226, 236, 230, 0.5);
+}
+.gt-mark.off,
+.gt-mark.prov {
+  color: #ff9b9b;
+}
+.gt-mark.wins {
+  color: #e9c977;
+  text-transform: none;
+}
+.gt-mark.think {
+  color: rgba(143, 240, 189, 0.95);
+}
+.gt-plate .av-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.gt-plate .av-wrap > :not(.gt-avatar) {
+  position: absolute;
+}
+.gt-plate .dealer-btn {
+  position: static;
+  width: 16px;
+  height: 16px;
+  font-size: 0.6rem;
+}
+/* mode label: "vs 1 CPU · Hand 1" on one line */
+.gt-mode .mc-1,
+.gt-mode .mc-2 {
+  white-space: nowrap;
+}
+.gt-mode .mc-2 {
+  color: rgba(233, 201, 119, 0.85);
+  font-weight: 600;
+}
+@media (max-width: 600px) {
+  .gt-mode .mc-2 {
+    display: none;
+  }
+}
+/* house-rules strip on phones: quiet, above the opponent */
+.gt-screen .rules-chips.in-strip {
+  margin: 0 0 8px;
+  opacity: 0.8;
+}
+/* desktop: house rules sit at the top of the Power Cards panel */
+.gt-panel .rules-chips {
+  margin: 0 16px 12px;
+}
+.gt-panel .side-tabs {
+  margin: 0 16px 10px;
+}
+/* main's JAKK pill rules (column layout, white rings, min-height) don't apply to the redesign's slim pill */
+.gt-btn.jakk-btn {
+  flex-direction: row;
+  padding: 0 16px 0 7px !important;
+  min-height: 46px !important;
+  animation: none;
+  box-shadow: none;
+}
+.gt-btn.jakk-btn.arm {
+  animation: gtJakkHint 1.6s ease-in-out infinite;
+}
+@keyframes gtJakkHint {
+  50% {
+    border-color: rgba(240, 213, 143, 0.75);
+    box-shadow: 0 0 12px rgba(240, 213, 143, 0.25);
+  }
+}
+.gt-btn.jakk-btn.off {
+  opacity: 1;
+}
+.gt-btn.jakk-btn .kh {
+  position: static;
+}
+@media (min-width: 1024px) {
+  .gt-play .jakk-btn {
+    min-height: 52px !important;
+  }
+}
+/* "Pick up N" must fit the phone pill */
+.gt-btn.draw-btn[data-penalty='true'] {
+  letter-spacing: 0.04em;
+  gap: 6px;
+  padding-right: 10px;
+}
+.gt-btn.draw-btn[data-penalty='true'] > span {
+  padding-right: 0;
 }

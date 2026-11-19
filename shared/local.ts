@@ -119,7 +119,7 @@ export class LocalGame {
         const n = Math.max(1, Math.min(MAX_BOTS_AI_MODE, Math.floor(msg.botCount ?? 1)));
         const room = new Room(this.genCode(), 'ai', profile(), this.deps);
         this.room = room;
-        room.startAi(n);
+        room.startAi(n, { houseRules: msg.houseRules, options: msg.options });
         return;
       }
       case 'leave': {
@@ -147,6 +147,12 @@ export class LocalGame {
             return fail(room.removeBot(pid, msg.playerId));
           case 'startGame':
             return fail(room.start(pid));
+          case 'setOptions':
+            return fail(room.setOptions(pid, { houseRules: msg.houseRules, options: msg.options }));
+          case 'nextHand':
+            return fail(room.nextHand(pid));
+          case 'requestHistory':
+            return fail(room.sendHistory(pid));
           case 'rematch':
             return fail(room.rematch(pid));
           case 'action':

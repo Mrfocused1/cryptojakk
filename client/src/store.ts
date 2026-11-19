@@ -1,17 +1,20 @@
 // Single connection + state module. React reads it through useApp()/useSel(); components call the exported actions.
 import { useSyncExternalStore } from 'react';
-import type { Card, PlayerAction, PlayerView } from '@shared/engine';
+import type { Card, HouseRules, MatchOptions, PlayerAction, PlayerView, Suit } from '@shared/engine';
 import {
   type Avatar,
   type ClientMessage,
   type ErrorCode,
+  type HistoryEntry,
+  MAX_BOTS_AI_MODE,
   PROTOCOL_VERSION,
   type RoomSnapshot,
   type ServerMessage,
   normalizeRoomCode,
 } from '@shared/protocol';
+import { SILENT_ERRORS, friendlyError } from './describe';
 import { LocalGame } from '@shared/local';
-import type { RoomSave } from '@shared/room';
+import { type RoomSave, isCompatibleSave } from '@shared/room';
 import { cancelFx, planEvents } from './fx';
 import { type Identity, getToken, loadIdentity, randomGuest, saveIdentity } from './identity';
 import { navigate } from './router';
@@ -49,6 +52,12 @@ export interface JoinError {
   code: ErrorCode;
   message: string;
 }
+/** The server's turn clock for the player to move. Remaining time = deadline - serverNow(). */
+export interface ClientTimer {
+  playerId: string;
+  deadline: number;
+  seconds: number;
+}
 
 export interface AppState {
   identity: Identity | null;
@@ -64,11 +73,20 @@ export interface AppState {
   feed: { id: number; text: string } | null;
   callout: Callout | null;
   topOverride: Card | null;
+  /** Active suit matching `topOverride` while a play is still animating (the view already holds the final suit). */
+  suitOverride: Suit | null;
   freshDelay: Record<string, number>;
   flights: Flight[];
   dealKey: number;
   dealing: boolean;
   rematchRequested: boolean;
+  timer: ClientTimer | null;
+  /** Server move history of the current hand (null until first requested). */
+  history: HistoryEntry[] | null;
+  /** The server refused our protocol version: the page is out of date. */
+  unsupported: boolean;
+  /** A saved friends room is being resumed and its state has not arrived yet. */
+  resuming: boolean;
 }
 
 let state: AppState = {
@@ -84,11 +102,16 @@ let state: AppState = {
   feed: null,
   callout: null,
   topOverride: null,
+  suitOverride: null,
   freshDelay: {},
   flights: [],
   dealKey: 0,
   dealing: false,
   rematchRequested: false,
+  timer: null,
+  history: null,
+  unsupported: false,
+  resuming: false,
 };
 
 const listeners = new Set<() => void>();
@@ -108,6 +131,15 @@ export function useApp(): AppState {
 }
 export function useSel<T>(sel: (s: AppState) => T): T {
   return useSyncExternalStore(subscribe, () => sel(state), () => sel(state));
+}
+
+// ------------------------------------------------------------------ server clock
+
+/** serverTime - clientReceiveTime, measured once per connection from the first timer we receive. */
+let clockOffset: number | null = null;
+/** Best estimate of the server's clock now. */
+export function serverNow(): number {
+  return Date.now() + (clockOffset ?? 0);
 }
 
 // ------------------------------------------------------------------ toast
@@ -135,8 +167,17 @@ let everWelcomed = false;
 const readyQueue: Array<() => void> = [];
 let reqCounter = 0;
 
-/** How long the very first connection may take before multiplayer is declared unavailable. */
-const FIRST_CONNECT_TIMEOUT_MS = 7000;
+/**
+ * How long the very first connection may take before multiplayer is declared unavailable. A free-tier host can need 30+ s to
+ * wake from sleep, so we keep retrying quietly (the loading screen is what the player sees) and only then give up.
+ */
+export const FIRST_CONNECT_TIMEOUT_MS = 45000;
+/** A single socket attempt is abandoned after this long and a fresh one is opened (a sleeping proxy may never answer). */
+const ATTEMPT_TIMEOUT_MS = 10000;
+/** Pause before retrying an attempt that failed fast (connection refused / 502 while the server boots). */
+const RETRY_GAP_MS = 2000;
+/** When the current run of first-connection attempts began (null = no run in progress). */
+let firstRunStart: number | null = null;
 const FRIENDS_ROOM_KEY = 'cj.friendsRoom';
 const LOCAL_SAVE_KEY = 'cj.local';
 const LOCAL_SAVE_MAX_AGE_MS = 12 * 3600 * 1000;
@@ -179,26 +220,28 @@ export function connect(): void {
   clearTimeout(reconnectTimer);
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   patch({ conn: everWelcomed ? 'reconnecting' : 'connecting' });
+  if (!everWelcomed && firstRunStart === null) firstRunStart = Date.now();
   let sock: WebSocket;
   try {
     sock = new WebSocket(wsUrl());
   } catch {
     if (everWelcomed) scheduleReconnect();
-    else markUnavailable();
+    else failFirstAttempt();
     return;
   }
   ws = sock;
   let opened = false;
   clearTimeout(openTimer);
   if (!everWelcomed) {
+    const left = FIRST_CONNECT_TIMEOUT_MS - (Date.now() - (firstRunStart as number));
     openTimer = setTimeout(() => {
       if (ws === sock && !opened) {
         ws = null;
         sock.onclose = null;
         sock.close();
-        markUnavailable();
+        failFirstAttempt();
       }
-    }, FIRST_CONNECT_TIMEOUT_MS);
+    }, Math.max(0, Math.min(ATTEMPT_TIMEOUT_MS, left)));
   }
   sock.onopen = () => {
     opened = true;
@@ -221,7 +264,7 @@ export function connect(): void {
     welcomed = false;
     clearTimeout(openTimer);
     if (!opened && !everWelcomed) {
-      markUnavailable();
+      failFirstAttempt();
       return;
     }
     if (ev.code === 4000) {
@@ -236,12 +279,24 @@ export function connect(): void {
   };
 }
 
+/** A first-connection attempt failed: retry quietly until the overall patience runs out, then declare it unavailable. */
+function failFirstAttempt(): void {
+  const spent = firstRunStart === null ? FIRST_CONNECT_TIMEOUT_MS : Date.now() - firstRunStart;
+  if (!wantConnect || spent + RETRY_GAP_MS >= FIRST_CONNECT_TIMEOUT_MS) {
+    markUnavailable();
+    return;
+  }
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connect, RETRY_GAP_MS);
+}
+
 /** Never reached the server: stop retrying and let the friends screens explain it. */
 function markUnavailable(): void {
+  firstRunStart = null;
   wantConnect = false;
   clearTimeout(reconnectTimer);
   readyQueue.length = 0;
-  patch({ conn: 'unavailable', joining: false });
+  patch({ conn: 'unavailable', joining: false, resuming: false });
 }
 
 /** Called by the friends screens: open the socket if it is not open. */
@@ -254,6 +309,7 @@ export function ensureMultiplayer(): void {
 export function retryMultiplayer(): void {
   attempt = 0;
   everWelcomed = false;
+  firstRunStart = null;
   connect();
 }
 
@@ -294,7 +350,13 @@ function disconnect(): void {
     sock.onclose = null;
     sock.close();
   }
-  patch({ conn: 'idle' });
+  firstRunStart = null;
+  patch({ conn: 'idle', resuming: false });
+}
+
+/** The player gave up waiting ("Play vs CPU instead"): stop everything multiplayer. */
+export function cancelConnect(): void {
+  if (!local) disconnect();
 }
 
 if (typeof window !== 'undefined') {
@@ -319,7 +381,7 @@ if (typeof window !== 'undefined') {
 
 function clearGame(): void {
   cancelFx();
-  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, freshDelay: {}, dealing: false });
+  patch({ view: null, flights: [], feed: null, callout: null, topOverride: null, suitOverride: null, freshDelay: {}, dealing: false, timer: null, history: null });
 }
 
 function leaveRoomLocally(): void {
@@ -336,8 +398,10 @@ function handle(msg: ServerMessage): void {
       welcomed = true;
       everWelcomed = true;
       attempt = 0;
+      firstRunStart = null;
+      clockOffset = null;
       const hadRoom = state.room !== null;
-      patch({ conn: 'open', playerId: msg.playerId });
+      patch({ conn: 'open', playerId: msg.playerId, ...(msg.resumed ? {} : { resuming: false }) });
       if (msg.resumed) {
         readyQueue.length = 0;
         const wantCode = /^\/r\/([^/]+)/i.exec(location.pathname)?.[1];
@@ -357,7 +421,7 @@ function handle(msg: ServerMessage): void {
     case 'roomState': {
       const room = msg.room;
       const was = state.room;
-      patch({ room, joining: false, joinError: null });
+      patch({ room, joining: false, joinError: null, resuming: false });
       if (room.mode === 'friends') writeStore(FRIENDS_ROOM_KEY, room.code);
       if (room.phase === 'lobby' || room.phase === 'rematch') {
         clearGame();
@@ -373,7 +437,8 @@ function handle(msg: ServerMessage): void {
       const prev = state.view;
       // Capture DOM geometry for animations BEFORE the new view is rendered.
       const start = msg.resync ? null : planEvents(msg.events, prev, msg.view, state.room);
-      patch({ view: msg.view });
+      patch({ view: msg.view, timer: readTimer(msg) });
+      if (historyWatch) send({ type: 'requestHistory' });
       if (start) {
         if (msg.view.version === 0) {
           patch({ dealKey: state.dealKey + 1, dealing: true });
@@ -382,11 +447,14 @@ function handle(msg: ServerMessage): void {
         start();
       } else {
         cancelFx();
-        patch({ topOverride: null, feed: null });
+        patch({ topOverride: null, suitOverride: null, feed: null });
       }
       noteTurn(prev, msg.view, msg.resync);
       return;
     }
+    case 'history':
+      patch({ history: msg.entries });
+      return;
     case 'error':
       handleError(msg.code, msg.message, msg.reqId);
       return;
@@ -402,9 +470,27 @@ function handle(msg: ServerMessage): void {
   }
 }
 
+/** Turn clock of a `state` message. Ignored for solo games (they never run a timer). */
+function readTimer(msg: Extract<ServerMessage, { type: 'state' }>): ClientTimer | null {
+  const t = msg.timer;
+  if (!t || local) return null;
+  if (clockOffset === null) clockOffset = t.serverTime - Date.now();
+  return { playerId: t.playerId, deadline: t.deadline, seconds: t.seconds };
+}
+
+let historyWatch = false;
+/** The History panel is open: ask for the log now and again after every state. */
+export function watchHistory(on: boolean): void {
+  historyWatch = on;
+  if (on) refreshHistory();
+}
+export function refreshHistory(): void {
+  send({ type: 'requestHistory' });
+}
+
 function noteTurn(prev: PlayerView | null, view: PlayerView, resync: boolean): void {
-  const mine = view.turn === view.you && !view.winner;
-  const wasMine = prev ? prev.turn === prev.you && !prev.winner : false;
+  const mine = view.turn === view.you && !view.handOver;
+  const wasMine = prev ? prev.turn === prev.you && !prev.handOver : false;
   if (mine && !wasMine && !resync) {
     vibrate(40);
     setTimeout(() => playSfx('turn'), 380);
@@ -413,11 +499,14 @@ function noteTurn(prev: PlayerView | null, view: PlayerView, resync: boolean): v
 
 function handleError(code: ErrorCode, message: string, reqId?: string): void {
   busyVersion = -1;
+  if (code === 'UNSUPPORTED_PROTOCOL') {
+    wantConnect = false;
+    clearTimeout(reconnectTimer);
+    patch({ unsupported: true, joining: false });
+    return;
+  }
+  if (SILENT_ERRORS.includes(code)) return; // normal races; the corrected state follows
   switch (code) {
-    case 'STALE_VERSION':
-    case 'JAKK_NOT_NEEDED':
-    case 'NOT_YOUR_TURN':
-      return; // normal races; the corrected state follows
     case 'ROOM_NOT_FOUND':
     case 'ROOM_FULL':
     case 'GAME_IN_PROGRESS':
@@ -425,13 +514,13 @@ function handleError(code: ErrorCode, message: string, reqId?: string): void {
         patch({ joinError: { code, message }, joining: false });
         return;
       }
-      toast(message);
+      toast(friendlyError(code, message));
       return;
     case 'ALREADY_IN_ROOM':
       sendRaw({ type: 'requestState' });
       return;
     default:
-      toast(message);
+      toast(friendlyError(code, message));
   }
 }
 
@@ -443,7 +532,7 @@ let busyTimer: ReturnType<typeof setTimeout> | undefined;
 /** Send a game action against the current view version. Ignores double taps on the same version. */
 export function act(action: PlayerAction): boolean {
   const view = state.view;
-  if (!view || view.winner) return false;
+  if (!view || view.handOver || view.spectator) return false;
   if (busyVersion === view.version && action.type !== 'declareJakk') return false;
   const ok = send({ type: 'action', version: view.version, action, reqId: `a${++reqCounter}` });
   if (!ok) {
@@ -510,8 +599,8 @@ function clearLocal(): void {
   }
 }
 
-function startLocal(botCount: number): void {
-  newLocal().handle({ type: 'createRoom', mode: 'ai', botCount });
+function startLocal(botCount: number, houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  newLocal().handle({ type: 'createRoom', mode: 'ai', botCount, ...(houseRules ? { houseRules } : {}), ...(options ? { options } : {}) });
 }
 
 function loadLocalSave(): RoomSave | null {
@@ -521,7 +610,7 @@ function loadLocalSave(): RoomSave | null {
     const o = JSON.parse(raw) as { at?: number; save?: RoomSave };
     const sv = o.save;
     if (!sv || typeof o.at !== 'number' || Date.now() - o.at > LOCAL_SAVE_MAX_AGE_MS) throw new Error('stale');
-    if (sv.mode !== 'ai' || !Array.isArray(sv.seats) || sv.seats.length < 2 || (sv.phase !== 'playing' && sv.phase !== 'finished') || !sv.state) throw new Error('bad');
+    if (sv.mode !== 'ai' || !Array.isArray(sv.seats) || sv.seats.length < 2 || (sv.phase !== 'playing' && sv.phase !== 'handOver' && sv.phase !== 'finished') || !sv.state || !isCompatibleSave(sv)) throw new Error('bad');
     return sv;
   } catch {
     removeStore(LOCAL_SAVE_KEY);
@@ -533,8 +622,8 @@ export function playNow(): void {
   startLocal(1);
 }
 
-export function playAI(botCount: number): void {
-  startLocal(Math.max(1, Math.min(3, botCount)));
+export function playAI(botCount: number, houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  startLocal(Math.max(1, Math.min(MAX_BOTS_AI_MODE, botCount)), houseRules, options);
 }
 
 export function createFriendsRoom(): void {
@@ -572,6 +661,12 @@ export function removeBot(playerId: string): void {
 export function startGame(): void {
   send({ type: 'startGame' });
 }
+export function setOptions(houseRules?: Partial<HouseRules>, options?: Partial<MatchOptions>): void {
+  send({ type: 'setOptions', ...(houseRules ? { houseRules } : {}), ...(options ? { options } : {}), reqId: 'opts' });
+}
+export function nextHand(): void {
+  send({ type: 'nextHand' });
+}
 export function rematch(): void {
   if (send({ type: 'rematch' })) patch({ rematchRequested: true });
 }
@@ -580,11 +675,19 @@ export function boot(): void {
   if (!state.identity) return;
   const save = onMultiplayerRoute() ? null : loadLocalSave(); // an invite link wins over an old solo game
   if (save) {
-    newLocal().restore(save);
-    return;
+    try {
+      newLocal().restore(save);
+      return;
+    } catch {
+      // A save that cannot be rebuilt (corrupt, or from an incompatible version): drop it and start clean.
+      clearLocal();
+    }
   }
   // Multiplayer only when a friends flow is on screen or a friends room is waiting to be resumed.
-  if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) connect();
+  if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) {
+    if (readStore(FRIENDS_ROOM_KEY)) patch({ resuming: true });
+    connect();
+  }
 }
 
 export type { Avatar };

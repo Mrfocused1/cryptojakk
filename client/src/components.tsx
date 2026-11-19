@@ -24,19 +24,18 @@ export function cardName(c: Pick<Card, 'rank' | 'suit'>): string {
 
 /** Short effect tag shown on power cards so players learn them. */
 export function powerTag(c: Card, rules: RulesConfig = DEFAULT_RULES): { text: string; danger: boolean } | null {
+  if (rules.skipRank !== null && c.rank === rules.skipRank) return { text: 'SKIP', danger: false };
+  if (rules.reverseRank !== null && c.rank === rules.reverseRank) return { text: 'REV', danger: false };
+  if (c.rank === 'Q') return { text: 'COVER', danger: false };
   switch (c.rank) {
     case '2':
       return { text: `+${rules.twoPenalty}`, danger: true };
-    case '7':
-      return { text: 'SKIP', danger: false };
-    case '8':
-      return { text: 'REV', danger: false };
     case 'J':
       return isBlackJack(c) ? { text: `+${rules.blackJackPenalty}`, danger: true } : { text: 'BLOCK', danger: false };
     case 'A':
       return { text: 'WILD', danger: false };
     default:
-      return null;
+      return null; // 7 and every plain card: no effect
   }
 }
 
@@ -53,8 +52,8 @@ const PIP_LAYOUT: Record<string, Array<[number, number]>> = {
   '10': [[0, 0], [1, 0], [0.5, 1 / 6], [0, 1 / 3], [1, 1 / 3], [0, 2 / 3], [1, 2 / 3], [0.5, 5 / 6], [0, 1], [1, 1]],
 };
 
-export function CardFace({ card, rules, className = '', style }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties }) {
-  const tag = powerTag(card, rules);
+export function CardFace({ card, rules, className = '', style, noTag = false }: { card: Card; rules?: RulesConfig; className?: string; style?: CSSProperties; noTag?: boolean }) {
+  const tag = noTag ? null : powerTag(card, rules);
   const court = card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' ? card.rank : null;
   // Every face is a printed card image: number cards and aces from the Affinity deck, courts from the
   // traditional English pattern, all on the same textured stock (see design/ and public/cards/).
@@ -125,12 +124,16 @@ export function Logo({ className = '' }: { className?: string }) {
 
 export function Sheet({ open, onClose, title, children, tall = false, variant }: { open: boolean; onClose: () => void; title: string; children: ReactNode; tall?: boolean; variant?: 'menu' }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose without re-subscribing on every render: a re-render in the middle of a keydown (the table
+  // sets its keyboard flag) would otherwise swap the listener and the first Escape would be lost.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        closeRef.current();
         return;
       }
       if (e.key !== 'Tab' || !ref.current) return;
@@ -154,7 +157,7 @@ export function Sheet({ open, onClose, title, children, tall = false, variant }:
       window.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   if (variant === 'menu') {
     // Site menu: ivory card-stock panel with a green suit rail down the left, logo, slab-serif title.
@@ -203,14 +206,7 @@ export function Sheet({ open, onClose, title, children, tall = false, variant }:
 
 export function Banner() {
   const { conn, online } = useApp();
-  // Don't flash "Connecting..." on a fast first connect.
-  const [late, setLate] = useState(false);
-  useEffect(() => {
-    setLate(false);
-    if (conn !== 'connecting') return;
-    const t = setTimeout(() => setLate(true), 900);
-    return () => clearTimeout(t);
-  }, [conn]);
+  // The first connection is covered by the loading screen (Loading.tsx), so no "Connecting..." banner here.
   let text: ReactNode = null;
   let kind = 'info';
   if (conn === 'taken') {
@@ -227,7 +223,6 @@ export function Banner() {
     kind = 'warn';
     text = "You're offline. We'll reconnect when you are back.";
   } else if (conn === 'reconnecting') text = 'Reconnecting...';
-  else if (conn === 'connecting' && late) text = 'Connecting...';
   if (!text) return null;
   return (
     <div className={`banner ${kind}`} role="status" aria-live="polite">
@@ -276,12 +271,13 @@ export function Kbd({ k, className = '' }: { k: string; className?: string }) {
 }
 
 export const SHORTCUTS: Array<{ keys: string[]; text: string }> = [
-  { keys: ['1', '-', '9'], text: 'Pick card by position' },
+  { keys: ['1', '-', '9'], text: 'Add card by position' },
   { keys: ['←', '→'], text: 'Move between cards' },
-  { keys: ['Enter', 'Space'], text: 'Select the focused card' },
-  { keys: ['P'], text: 'Play selection' },
-  { keys: ['D'], text: 'Draw / pick up' },
-  { keys: ['J'], text: 'Call or arm JAKK' },
+  { keys: ['Enter', 'Space'], text: 'Select the focused card, in play order' },
+  { keys: ['Backspace'], text: 'Remove the last selected card' },
+  { keys: ['P'], text: 'Play the selection' },
+  { keys: ['D'], text: 'Draw / take the pickup' },
+  { keys: ['J'], text: 'Toggle JAKK' },
   { keys: ['Esc'], text: 'Clear selection / close' },
   { keys: ['?'], text: 'How to play' },
 ];
@@ -404,6 +400,10 @@ const ICONS: Record<string, ReactNode> = {
   down: <path d="m5.500 9.500 6.500 6.500 6.500-6.500" />,
   plus: <path d="M12 5v14M5 12h14" />,
   home: <path d="M4 11 12 4l8 7v9h-5.500v-6h-5v6H4z" />,
+  list: <path d="M8.500 6.500H20M8.500 12H20M8.500 17.500H20M4 6.500h.01M4 12h.01M4 17.500h.01" />,
+  star: <path d="m12 3.500 2.600 5.400 5.900.8-4.300 4.100 1 5.800L12 16.800l-5.200 2.800 1-5.800-4.300-4.100 5.900-.8z" />,
+  sliders: <path d="M4 7h9M17 7h3M4 17h3M11 17h9M13 4.500v5M7 14.500v5" />,
+  refresh: <path d="M19.500 12a7.500 7.500 0 1 1-2.200-5.300M19.500 4.500v4h-4" />,
 };
 
 export function Icon({ name, className = '' }: { name: keyof typeof ICONS | string; className?: string }) {
@@ -448,6 +448,7 @@ export function useMuted(): boolean {
 }
 
 export function AppHeader({
+  onHistory,
   onBack,
   backLabel = 'Back',
   inGame = false,
@@ -460,6 +461,7 @@ export function AppHeader({
   left,
   className = '',
 }: {
+  onHistory?: () => void;
   onBack?: () => void;
   backLabel?: string;
   inGame?: boolean;
@@ -515,10 +517,27 @@ export function AppHeader({
             <Icon name="help" className="row-ico" />
             <span className="row-t">
               <strong>How to Play</strong>
-              <small>Power cards, JAKK and the basics</small>
+              <small>Cards, sequences, JAKK and house rules</small>
             </span>
             <Icon name="next" className="row-go" />
           </button>
+          {onHistory && (
+            <button
+              className="row"
+              data-testid="menu-history"
+              onClick={() => {
+                setOpen(false);
+                onHistory();
+              }}
+            >
+              <Icon name="list" className="row-ico" />
+              <span className="row-t">
+                <strong>Move history</strong>
+                <small>Every move of this hand, in plain words</small>
+              </span>
+              <Icon name="next" className="row-go" />
+            </button>
+          )}
           {!inGame && (
             <button className="row" onClick={() => go('/profile')}>
               <Icon name="user" className="row-ico" />

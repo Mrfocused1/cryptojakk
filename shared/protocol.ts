@@ -1,8 +1,11 @@
 // Client <-> server protocol. Keep docs/PROTOCOL.md in sync with this file.
 // Transport: one WebSocket at /ws, JSON text frames, one message object per frame.
+import { HANDS_TO_WIN_OPTIONS, HOUSE_RULE_KEYS, TURN_SECONDS_OPTIONS } from './engine';
 import type {
   CardId,
   GameEvent,
+  HouseRules,
+  MatchOptions,
   PlayerAction,
   PlayerId,
   PlayerView,
@@ -10,7 +13,7 @@ import type {
   RulesConfig,
 } from './engine';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 // ---------------------------------------------------------------- shared constants
 
@@ -19,16 +22,17 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const ROOM_CODE_LENGTH = 5;
 export const NAME_MAX_LENGTH = 16;
 export const MAX_MESSAGE_BYTES = 4096;
-export const MAX_BOTS_AI_MODE = 3;
+export const MAX_BOTS_AI_MODE = 5;
 
 export type RoomMode = 'friends' | 'ai';
 /**
  * lobby    - friends room waiting to start (also used for the first game)
  * rematch  - friends room after a finished game, waiting for the host to start again (same code)
- * playing  - game in progress
- * finished - game over (winner is in the final view); rematch can be requested
+ * playing  - a hand is in progress
+ * handOver - a hand ended and nobody has reached `options.handsToWin` yet: waiting for `nextHand`
+ * finished - the match is over (`matchWinner`); rematch can be requested
  */
-export type RoomPhase = 'lobby' | 'rematch' | 'playing' | 'finished';
+export type RoomPhase = 'lobby' | 'rematch' | 'playing' | 'handOver' | 'finished';
 
 export interface Avatar {
   /** An emoji (1-8 chars). At least one of emoji / icon must be present. */
@@ -48,6 +52,8 @@ export interface LobbyPlayer {
   /** Bots are always ready. The host's flag is irrelevant for starting. */
   ready: boolean;
   connected: boolean;
+  /** Joined mid-hand: watching (public info only) and dealt in from the next hand. */
+  waiting: boolean;
 }
 
 export interface RoomSnapshot {
@@ -61,7 +67,40 @@ export interface RoomSnapshot {
   maxPlayers: number;
   /** True when the host could press Start right now (>=2 seats and all non-host humans ready). */
   canStart: boolean;
+  /** Effective rules of the next / current hand (defaults + houseRules). */
   rules: RulesConfig;
+  /** House rules chosen by the host (also visible to everybody before a match). */
+  houseRules: HouseRules;
+  options: MatchOptions;
+  /** Hands won so far in this match. */
+  scores: Record<PlayerId, number>;
+  /** 1-based number of the current / last hand (0 before the first deal). */
+  handNumber: number;
+  /** Set when the match is over (phase 'finished'). */
+  matchWinner: PlayerId | null;
+}
+
+/** Server-authoritative turn clock. Show `deadline - (Date.now() + (serverTime - clientReceiveTime))`, or just use `remainingMs`. */
+export interface TurnTimer {
+  playerId: PlayerId;
+  /** Absolute server timestamp (ms since epoch) when the turn expires. */
+  deadline: number;
+  /** Server clock at the time of sending, so clients can correct their clock offset. */
+  serverTime: number;
+  seconds: number;
+}
+
+export interface HistoryEntry {
+  seq: number;
+  /** Hand number within the match. */
+  hand: number;
+  /** State version after the entry (0 for the deal). */
+  version: number;
+  /** Who acted; null for the deal. */
+  playerId: PlayerId | null;
+  kind: 'deal' | 'play' | 'draw' | 'takePenalty' | 'declareJakk' | 'chooseSuit' | 'timeout' | 'bot';
+  /** Public events only (a drawer's cards are never included). */
+  events: GameEvent[];
 }
 
 // ---------------------------------------------------------------- client -> server
@@ -73,7 +112,12 @@ interface Base {
 
 export type ClientMessage =
   | (Base & { type: 'hello'; protocol?: number; sessionToken: string; name: string; avatar: Avatar })
-  | (Base & { type: 'createRoom'; mode: RoomMode; botCount?: number })
+  | (Base & { type: 'createRoom'; mode: RoomMode; botCount?: number; houseRules?: Partial<HouseRules>; options?: Partial<MatchOptions> })
+  /** Host only, lobby / rematch only. */
+  | (Base & { type: 'setOptions'; houseRules?: Partial<HouseRules>; options?: Partial<MatchOptions> })
+  /** Host only, phase handOver: deal the next hand. */
+  | (Base & { type: 'nextHand' })
+  | (Base & { type: 'requestHistory' })
   | (Base & { type: 'joinRoom'; code: string })
   | (Base & { type: 'leave' })
   | (Base & { type: 'setReady'; ready: boolean })
@@ -106,6 +150,8 @@ export type ServerErrorCode =
   | 'NOT_ALL_READY'
   | 'NOT_ENOUGH_PLAYERS'
   | 'WRONG_PHASE'
+  | 'HAND_IN_PROGRESS'
+  | 'INVALID_OPTIONS'
   | 'NOT_A_BOT'
   | 'BOT_LIMIT'
   | 'SERVER_BUSY'
@@ -132,7 +178,10 @@ export type ServerMessage =
       events: GameEvent[];
       /** true when this is a re-send (reconnect, requestState, stale/wrong-turn rejection) rather than a new action result. */
       resync: boolean;
+      /** Turn clock for the player to move (null when no timer is running or a bot is to move). */
+      timer: TurnTimer | null;
     }
+  | { type: 'history'; entries: HistoryEntry[] }
   | { type: 'error'; code: ErrorCode; message: string; reqId?: string }
   | { type: 'left' }
   | { type: 'roomClosed'; code: string; reason: 'expired' | 'idle' | 'empty' }
@@ -182,3 +231,33 @@ export function validateAvatar(a: unknown): Avatar | null {
 }
 
 export type { CardId };
+
+export interface OptionsInput {
+  houseRules?: Partial<HouseRules>;
+  options?: Partial<MatchOptions>;
+}
+
+/** Strictly validate host-supplied house rules / match options (unknown keys and bad values give null). */
+export function parseOptionsInput(houseRules: unknown, options: unknown): OptionsInput | null {
+  const out: OptionsInput = {};
+  if (houseRules !== undefined) {
+    if (typeof houseRules !== 'object' || houseRules === null || Array.isArray(houseRules)) return null;
+    const hr: Partial<HouseRules> = {};
+    for (const [k, v] of Object.entries(houseRules)) {
+      if (!(HOUSE_RULE_KEYS as readonly string[]).includes(k) || typeof v !== 'boolean') return null;
+      (hr as Record<string, boolean>)[k] = v;
+    }
+    out.houseRules = hr;
+  }
+  if (options !== undefined) {
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) return null;
+    const op: Partial<MatchOptions> = {};
+    for (const [k, v] of Object.entries(options)) {
+      if (k === 'handsToWin' && (HANDS_TO_WIN_OPTIONS as readonly unknown[]).includes(v)) op.handsToWin = v as MatchOptions['handsToWin'];
+      else if (k === 'turnSeconds' && (TURN_SECONDS_OPTIONS as readonly unknown[]).includes(v)) op.turnSeconds = v as MatchOptions['turnSeconds'];
+      else return null;
+    }
+    out.options = op;
+  }
+  return out;
+}

@@ -33,23 +33,29 @@ export interface ScenarioOpts {
   turn: PlayerId;
   direction?: 1 | -1;
   penalty?: Penalty | null;
-  jakkOwed?: PlayerId | null;
+  /** Players with a live JAKK declaration. */
+  jakk?: PlayerId[];
   /** Cards that will be drawn next, first element first. */
   draw?: string[];
   /** Cards under the top discard (bottom first). */
   under?: string[];
   /** Where all unlisted cards go: 'draw' (default, beneath `draw`) or 'discard' (under the top). */
-  rest?: 'draw' | 'discard';
+  rest?: 'draw' | 'discard' | 'none';
   rules?: Partial<RulesConfig>;
+  out?: PlayerId[];
+  provisional?: PlayerId[];
+  dealer?: PlayerId;
+  coverNeeded?: boolean;
+  awaitingSuit?: boolean;
 }
 
-/** Build an exact GameState (all 52 cards accounted for). */
+/** Build an exact GameState (all 52 cards accounted for, unless rest: 'none'). */
 export function scenario(o: ScenarioOpts): GameState {
   const players = Object.keys(o.hands);
   const used = new Set<string>([...Object.values(o.hands).flat(), o.top, ...(o.draw ?? []), ...(o.under ?? [])]);
   const total = Object.values(o.hands).flat().length + 1 + (o.draw ?? []).length + (o.under ?? []).length;
   if (used.size !== total) throw new Error('scenario: duplicate card ids');
-  const rest = buildDeck().filter((c) => !used.has(c.id));
+  const rest = o.rest === 'none' ? [] : buildDeck().filter((c) => !used.has(c.id));
   const hands: GameState['hands'] = {};
   for (const p of players) hands[p] = o.hands[p].map(cardFromId);
   const draw = (o.draw ?? []).map(cardFromId).reverse(); // top = end
@@ -59,15 +65,22 @@ export function scenario(o: ScenarioOpts): GameState {
     rules: withRules(o.rules),
     players,
     hands,
-    drawPile: o.rest === 'discard' ? draw : [...rest, ...draw],
+    drawPile: o.rest === 'discard' || o.rest === 'none' ? draw : [...rest, ...draw],
     discard: [...(o.rest === 'discard' ? rest : []), ...under, cardFromId(o.top)],
     activeSuit: o.suit ?? cardFromId(o.top).suit,
     direction: o.direction ?? 1,
     turn: players.indexOf(o.turn),
+    dealer: o.dealer ? players.indexOf(o.dealer) : players.length - 1,
     penalty: o.penalty ?? null,
-    jakkOwed: o.jakkOwed ?? null,
-    drewCardId: null,
+    jakk: Object.fromEntries((o.jakk ?? []).map((p) => [p, true])),
+    out: o.out ?? [],
+    provisional: o.provisional ?? [],
+    awaitingSuit: o.awaitingSuit ?? false,
+    coverNeeded: o.coverNeeded ?? false,
+    opening: null,
+    turns: 0,
     winner: null,
+    handOver: null,
   };
 }
 

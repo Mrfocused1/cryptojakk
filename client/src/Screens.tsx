@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { type Card, DEFAULT_RULES } from '@shared/engine';
-import { NAME_MAX_LENGTH, normalizeRoomCode, sanitizeName } from '@shared/protocol';
+import { type Card, DEFAULT_MATCH_OPTIONS, DEFAULT_RULES, type HouseRules, type MatchOptions, houseRulesOf } from '@shared/engine';
+import { MAX_BOTS_AI_MODE, NAME_MAX_LENGTH, normalizeRoomCode, sanitizeName } from '@shared/protocol';
 import { AppHeader, Avatar, CardBack, CardFace, DecoChips, Icon, LogoTile, ChipStack, useMuted } from './components';
 import { AVATAR_COLORS, AVATAR_ICONS, type Identity, randomGuest } from './identity';
 import { navigate } from './router';
+import { readStore, writeStore } from './storage';
+import { LogoLoader } from './Loading';
 import { clearJoinError, createFriendsRoom, ensureMultiplayer, joinCode, playAI, playNow, retryMultiplayer, setIdentity, toast, useApp } from './store';
 import { setMuted, unlockAudio } from './sound';
 import { isReduced, setReduce, useReduce } from './prefs';
+import { OptionsEditor } from './Options';
 
 const card = (id: string): Card => ({ id, rank: id.slice(0, -1) as Card['rank'], suit: id.slice(-1) as Card['suit'] });
 
@@ -53,10 +56,13 @@ function Panel({ icon, art, title, text, onClick, testid, go = true, lock = fals
 }
 
 const FAQ: Array<{ q: string; a: string }> = [
-  { q: 'How do I get started?', a: 'Tap Play Now. You are dealt in against a bot straight away: no sign-up, no download. Pick a name and avatar any time from the menu.' },
-  { q: 'Is it casino blackjack?', a: 'No. Crypto Jakk is the UK-style card-shedding game (think Crazy Eights with power cards). Everyone starts with the same number of cards and the first player to get rid of all of theirs wins.' },
+  { q: 'How do I get started?', a: 'Tap Play Now. You are dealt in against a CPU player straight away: no sign-up, no download. Pick a name and avatar any time from the menu.' },
+  { q: 'Is it casino blackjack?', a: 'No. Crypto Jakk is the UK-style card-shedding game (think Crazy Eights with power cards). Everyone starts with seven cards and the first player to get rid of all of theirs, legally, wins the hand.' },
+  { q: 'What are sequences?', a: 'You can play several cards in one turn: the same rank, or the same suit one step up or down (2♥ 3♥ 4♥ 5♥). Tap them in the order you want them played and the game shows what the play will do before you commit.' },
+  { q: 'What is JAKK?', a: 'You must declare JAKK before the turn you go out on. It lasts one turn. If you empty your hand without it, your cards stay played, you pick up one card and the game goes on. A Queen can never be your last card either.' },
+  { q: 'What are house rules?', a: 'Optional rules the host switches on before a match: flexible or strict Queen cover, mixed 2 / Jack stacking, Bring Backs, finishing on power cards and First Card Active. Everyone can see which are on, at the table and in the lobby.' },
   { q: 'Do I need an account?', a: 'No. Your display name and a secret seat key live in your browser only. Clearing your browser data removes them.' },
-  { q: 'Can I play with friends?', a: 'Yes. Create a private room and send the link or the five-letter code. Friends rooms need the multiplayer server to be online; solo games against bots always work, even offline.' },
+  { q: 'Can I play with friends?', a: 'Yes, 2 to 6 players. Create a private room and send the link or the five-letter code. Friends who join mid-hand watch and are dealt in next hand. Friends rooms need the multiplayer server to be online; solo games against 1 to 5 CPU players always work, even offline.' },
   { q: 'Does it cost anything? Is there real money?', a: 'It is free and there is no money in the game at all: no wallet, no stakes and nothing to buy. The chips you see are decoration.' },
 ];
 
@@ -212,11 +218,11 @@ export function Landing() {
         <section className="sec lobby-sec" id="modes">
           <p className="eyebrow">Choose a table</p>
           <h2 className="title h2">Game Lobby</h2>
-          <p className="subtitle">Jump in against bots or set up a private table.</p>
+          <p className="subtitle">Jump in against CPU players or set up a private table.</p>
           <div className="rows">
-            <Panel icon="spade" art="bolt" title="Quick Game" text="Face one bot, dealt in instantly" onClick={go} />
-            <Panel icon="bot" art="robot" title="Play CPU" text="Take on one, two or three bots" onClick={() => navigate('/ai')} testid="play-ai" />
-            <Panel icon="users" art="users" title="Play Friends" text="Private room, share a link" onClick={() => navigate('/friends')} testid="play-friends" lock />
+            <Panel icon="spade" art="bolt" title="Quick Game" text="Face one CPU, dealt in instantly" onClick={go} />
+            <Panel icon="bot" art="robot" title="Play CPU" text="Take on one to five bots, pick your house rules" onClick={() => navigate('/ai')} testid="play-ai" />
+            <Panel icon="users" art="users" title="Play Friends" text="Private room for 2 to 6, share a link" onClick={() => navigate('/friends')} testid="play-friends" lock />
             <Panel icon="hash" art="hash" title="Join with Code" text="Got a five-letter room code?" onClick={() => navigate('/friends')} />
           </div>
           <button className="pill secondary" data-testid="how-to-play" onClick={() => navigate('/how-to-play')}>
@@ -236,8 +242,8 @@ export function Landing() {
           <p className="subtitle">From name to first card in three simple steps.</p>
           <div className="rows cols3">
             <Panel icon="user" art="person" title="1. Pick a name" text="Choose a nickname and avatar. No account needed." go={false} />
-            <Panel icon="cards" art="cards" title="2. Start a game" text="Play a bot, or send friends a room link." go={false} />
-            <Panel icon="spade" art="spade" title="3. Dump your hand" text="Match suit or rank, use power cards and call JAKK on one card." go={false} />
+            <Panel icon="cards" art="cards" title="2. Start a game" text="Play a CPU, or send friends a room link." go={false} />
+            <Panel icon="spade" art="spade" title="3. Dump your hand" text="Match suit or rank, play runs and declare JAKK before you go out." go={false} />
           </div>
           <button className="pill primary" onClick={go} disabled={busy}>
             Play Now <Icon name="next" />
@@ -260,7 +266,7 @@ export function Landing() {
               <img className="why-art" src="/art/icon-power.webp" alt="" width="52" height="52" draggable={false} />
               <span>
                 <strong>Power Cards</strong>
-                <small>2s, Jacks, 7s, 8s and wild Aces keep every turn lively.</small>
+                <small>2s, Jacks, 8s, Kings, Queens and wild Aces, plus runs and same-rank sets, keep every turn lively.</small>
               </span>
             </div>
             <div className="why">
@@ -289,7 +295,7 @@ export function Landing() {
         <section className="sec cta-sec">
           <HeroCards className="small" />
           <h2 className="title h2">Ready to Play?</h2>
-          <p className="subtitle">Jump in against a bot, or invite friends to a private table. It is free.</p>
+          <p className="subtitle">Jump in against a CPU, or invite friends to a private table. It is free.</p>
           <button className="pill primary big" onClick={go} disabled={busy}>
             Play Now <Icon name="next" />
           </button>
@@ -411,7 +417,7 @@ export function MultiplayerOffline({ onRetry }: { onRetry: () => void }) {
     <div className="offline-panel" role="alert" data-testid="mp-offline">
       <p className="eyebrow">Connection</p>
       <p className="title h3">Multiplayer is offline right now</p>
-      <p className="subtitle">We couldn't reach the game server. Playing against bots still works anywhere, even without a connection.</p>
+      <p className="subtitle">We couldn't reach the game server. Playing against CPU players still works anywhere, even without a connection.</p>
       <div className="stack">
         <button className="pill primary" data-testid="mp-retry" onClick={onRetry}>
           Retry <Icon name="next" />
@@ -429,7 +435,7 @@ export function MultiplayerOffline({ onRetry }: { onRetry: () => void }) {
 
 const JOIN_MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "We couldn't find that room. It may have expired. Check the code or ask for a fresh link.",
-  ROOM_FULL: 'That room is full (4 players).',
+  ROOM_FULL: 'That room is full (6 players).',
   GAME_IN_PROGRESS: 'That game has already started. Ask your friends for a rematch invite, or start your own room.',
 };
 
@@ -467,7 +473,7 @@ export function PlayFriends() {
       <div className="friends-grid">
         <section className="fcard create">
           <h2 className="fcard-h">Start a room</h2>
-          <p className="fcard-p">You get a code and a link to send. Add bots to fill empty seats, then deal.</p>
+          <p className="fcard-p">You get a code and a link to send. Choose house rules, add CPU players to fill empty seats (2 to 6 players), then deal.</p>
           <button
             className="pill primary wide"
             data-testid="create-room"
@@ -479,7 +485,7 @@ export function PlayFriends() {
               setTimeout(() => setBusy(false), 3000);
             }}
           >
-            {busy && conn !== 'open' ? 'Connecting...' : 'Create room'} <Icon name="next" />
+            {busy && conn !== 'open' ? <LogoLoader size={13} /> : <>Create room <Icon name="next" /></>}
           </button>
         </section>
         <div className="or">
@@ -516,7 +522,7 @@ export function PlayFriends() {
               aria-label="Room code"
             />
             <button className="pill secondary" type="submit" disabled={cleaned.length < 5 || joining} data-testid="join-btn">
-              {joining ? 'Joining...' : 'Join'}
+              {joining ? <LogoLoader size={11} /> : 'Join'}
             </button>
           </form>
           {cleaned.length === 5 && !valid && <p className="error-text">Room codes never contain 0, O, 1 or I. Double-check the code.</p>}
@@ -535,23 +541,51 @@ export function PlayFriends() {
   );
 }
 
-// ------------------------------------------------------------------ play AI
+// ------------------------------------------------------------------ play CPU
+
+const AI_SETUP_KEY = 'cj.aiSetup';
+interface AiSetup {
+  n: number;
+  houseRules: HouseRules;
+  options: MatchOptions;
+}
+function loadAiSetup(): AiSetup {
+  const def: AiSetup = { n: 2, houseRules: houseRulesOf(DEFAULT_RULES), options: { ...DEFAULT_MATCH_OPTIONS } };
+  try {
+    const o = JSON.parse(readStore(AI_SETUP_KEY) ?? 'null') as Partial<AiSetup> | null;
+    if (!o) return def;
+    const hr = { ...def.houseRules };
+    for (const k of Object.keys(hr) as Array<keyof HouseRules>) if (typeof o.houseRules?.[k] === 'boolean') hr[k] = o.houseRules[k] as boolean;
+    const hands = [1, 3, 5].includes(o.options?.handsToWin as number) ? (o.options?.handsToWin as MatchOptions['handsToWin']) : 1;
+    const n = Number.isInteger(o.n) && (o.n as number) >= 1 && (o.n as number) <= MAX_BOTS_AI_MODE ? (o.n as number) : 2;
+    return { n, houseRules: hr, options: { handsToWin: hands, turnSeconds: 0 } };
+  } catch {
+    return def;
+  }
+}
 
 export function PlayAI() {
-  const [n, setN] = useState(2);
+  const [setup, setSetup] = useState<AiSetup>(loadAiSetup);
   const [busy, setBusy] = useState(false);
+  const { n, houseRules, options } = setup;
+  const update = (p: Partial<AiSetup>) =>
+    setSetup((cur) => {
+      const next = { ...cur, ...p };
+      writeStore(AI_SETUP_KEY, JSON.stringify(next));
+      return next;
+    });
   return (
-    <div className="screen page friends">
+    <div className="screen page friends ai-page">
       <AppHeader onBack={() => navigate('/')} backLabel="Home" />
-      <div className="body narrow">
+      <div className="body narrow wide-ai">
         <p className="eyebrow">Solo table</p>
         <h1 className="title h2">Play CPU</h1>
-        <p className="subtitle">How many bots do you want to beat?</p>
-        <div className="seg" role="radiogroup" aria-label="Number of opponents">
-          {[1, 2, 3].map((k) => (
-            <button key={k} role="radio" aria-checked={n === k} className={`seg-opt ${n === k ? 'on' : ''}`} onClick={() => setN(k)} data-testid={`bots-${k}`}>
+        <p className="subtitle">How many CPU opponents do you want to beat?</p>
+        <div className="seg five" role="radiogroup" aria-label="Number of opponents">
+          {[1, 2, 3, 4, 5].map((k) => (
+            <button key={k} role="radio" aria-checked={n === k} className={`seg-opt ${n === k ? 'on' : ''}`} onClick={() => update({ n: k })} data-testid={`bots-${k}`}>
               <strong>{k}</strong>
-              <span>{k === 1 ? 'opponent' : 'opponents'}</span>
+              <span>CPU</span>
             </button>
           ))}
         </div>
@@ -563,21 +597,54 @@ export function PlayAI() {
           ))}
           <span className="sp-you">You</span>
         </div>
-        <button
-          className="pill primary big wide"
-          data-testid="start-ai"
-          disabled={busy}
-          onClick={() => {
-            unlockAudio();
-            setBusy(true);
-            playAI(n);
-            setTimeout(() => setBusy(false), 1500);
-          }}
-        >
-          Start game <Icon name="next" />
-        </button>
+        <section className="ai-opts" aria-label="Match options and house rules">
+          <h2 className="opt-title">Match options</h2>
+          <OptionsEditor
+            houseRules={houseRules}
+            options={options}
+            editable
+            showTimer={false}
+            onHouseRules={(p) => update({ houseRules: { ...houseRules, ...p } })}
+            onOptions={(p) => update({ options: { ...options, ...p } })}
+          />
+          <p className="opt-note">The turn timer is for friends rooms. CPU players play at their own pace.</p>
+        </section>
+        <div className="sticky-cta">
+          <button
+            className="pill primary big wide"
+            data-testid="start-ai"
+            disabled={busy}
+            onClick={() => {
+              unlockAudio();
+              setBusy(true);
+              playAI(n, houseRules, { handsToWin: options.handsToWin });
+              setTimeout(() => setBusy(false), 1500);
+            }}
+          >
+            Start game <Icon name="next" />
+          </button>
+        </div>
       </div>
       <DecoChips variant="bottom" />
+    </div>
+  );
+}
+
+/** Shown when the server speaks a newer protocol than this page. */
+export function UpdateScreen() {
+  return (
+    <div className="screen page update-screen" data-testid="update-screen" role="alert">
+      <div className="body narrow center">
+        <p className="eyebrow">New version</p>
+        <h1 className="title h2">Please refresh</h1>
+        <p className="subtitle">A new version of Crypto Jakk is available. Refresh the page to keep playing with your friends.</p>
+        <div className="stack">
+          <button className="pill primary big" data-testid="reload" onClick={() => location.reload()}>
+            Refresh now <Icon name="next" />
+          </button>
+        </div>
+        <p className="quiet">Games against CPU players on this device are not affected.</p>
+      </div>
     </div>
   );
 }

@@ -1,15 +1,28 @@
+import { lazy, Suspense } from 'react';
 import { Banner, Toast } from './components';
+import { LoadingGate } from './Loading';
 import { HowToPlayPage } from './HowToPlay';
 import { Lobby } from './Lobby';
 import { useRoute, navigate } from './router';
-import { GuestEntry, JoinFlow, Landing, PlayAI, PlayFriends } from './Screens';
+import { GuestEntry, JoinFlow, Landing, PlayAI, PlayFriends, UpdateScreen } from './Screens';
 import { useApp } from './store';
 import { Table } from './Table';
+
+// Dev-only preview route (tree-shaken from production builds).
+const LoadingPreview = import.meta.env.DEV ? lazy(() => import('./LoadingPreview')) : null;
 
 function Routed() {
   const route = useRoute();
   const { identity } = useApp();
   switch (route.name) {
+    case 'loading':
+      return LoadingPreview ? (
+        <Suspense fallback={null}>
+          <LoadingPreview />
+        </Suspense>
+      ) : (
+        <Landing />
+      );
     case 'how':
       return <HowToPlayPage />;
     case 'profile':
@@ -26,15 +39,17 @@ function Routed() {
 }
 
 export function App() {
-  const { room } = useApp();
+  const { room, unsupported } = useApp();
   let screen;
-  if (room) screen = room.phase === 'lobby' || room.phase === 'rematch' ? <Lobby /> : <Table />;
+  if (unsupported) screen = <UpdateScreen />;
+  else if (room) screen = room.phase === 'lobby' || room.phase === 'rematch' ? <Lobby /> : <Table />;
   else screen = <Routed />;
   return (
     <div className="app">
       <Banner />
       {screen}
       <Toast />
+      <LoadingGate />
     </div>
   );
 }

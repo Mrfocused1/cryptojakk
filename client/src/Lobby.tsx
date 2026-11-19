@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { LobbyPlayer, RoomSnapshot } from '@shared/protocol';
 import { AppHeader, Avatar, DecoChips, Icon } from './components';
-import { addBot, leaveRoom, removeBot, setReady, startGame, useApp } from './store';
+import { OptionsEditor, RulesChips } from './Options';
+import { addBot, leaveRoom, removeBot, setOptions, setReady, startGame, useApp } from './store';
 
 function startBlock(room: RoomSnapshot): string | null {
   if (room.canStart) return null;
   if (room.players.length < room.minPlayers) return `Need at least ${room.minPlayers} players`;
-  const waiting = room.players.find((p) => !p.isHost && !p.isBot && !p.ready);
+  const waiting = room.players.find((p) => !p.isHost && !p.isBot && !p.ready && !p.waiting);
   if (waiting) return `Waiting for ${waiting.name} to ready up`;
   return 'Not ready to start yet';
 }
@@ -90,9 +91,10 @@ function PlayerRow({ p, me, isHost, canRemove }: { p: LobbyPlayer; me: boolean; 
       </span>
       <span className="pr-badges">
         {p.isHost && <b className="badge host">HOST</b>}
-        {p.isBot && <b className="badge">BOT</b>}
+        {p.isBot && <b className="badge">CPU</b>}
         {!p.connected && !p.isBot && <b className="badge off">OFFLINE</b>}
-        {!p.isHost && (p.ready ? <b className="badge ready">READY</b> : <b className="badge wait">NOT READY</b>)}
+        {p.waiting && <b className="badge watch">WATCHING</b>}
+        {!p.isHost && !p.waiting && (p.ready ? <b className="badge ready">READY</b> : <b className="badge wait">NOT READY</b>)}
       </span>
       {isHost && p.isBot && canRemove && (
         <button className="icon-btn small" aria-label={`Remove ${p.name}`} onClick={() => removeBot(p.playerId)}>
@@ -135,6 +137,7 @@ export function Lobby() {
         </div>
 
         <div className="lobby-col lobby-people">
+          <RulesChips houseRules={room.houseRules} options={room.options} className="in-lobby top" />
           <h2 className="section-title">
             Players <span>{room.players.length}/{room.maxPlayers}</span>
           </h2>
@@ -154,10 +157,10 @@ export function Lobby() {
             {amHost ? (
               <>
                 <button className="pill secondary wide" onClick={addBot} disabled={room.players.length >= room.maxPlayers} data-testid="add-bot">
-                  <Icon name="plus" /> Add bot
+                  <Icon name="plus" /> Add CPU
                 </button>
                 <button className="pill primary wide" onClick={startGame} disabled={!room.canStart} data-testid="start-game">
-                  Start game
+                  {room.phase === 'rematch' ? 'Start rematch' : 'Start game'}
                 </button>
                 {block && (
                   <p className="reason" data-testid="start-reason">
@@ -176,30 +179,40 @@ export function Lobby() {
           </div>
 
           <p className="rules-line">
-            {room.minPlayers}-{room.maxPlayers} players. Match suit or rank, empty your hand first. 2 = +2, black Jack = +5, 7 skips, 8 reverses, Ace is wild. Say JAKK on one card.
+            {room.minPlayers}-{room.maxPlayers} players. Match the suit or rank, play runs and same-rank sets, and be first to empty your hand. Declare JAKK before the turn you finish on.
           </p>
           <ul className="rules-list" aria-label="Rules summary">
             <li>
               <b>Goal</b> Empty your hand first. Match the top card by suit or rank, or draw.
             </li>
             <li>
-              <b>2</b> +2 for the next player, stackable with another 2.
+              <b>Sequences</b> Play several cards in a turn: same rank, or same suit one up or down (2♥ 3♥ 4♥).
             </li>
             <li>
-              <b>Black Jack</b> +5, answered only by another Jack. A red Jack cancels it.
+              <b>2 / Black Jack</b> +2 / +5 for the next player. A red Jack blocks a Jack pickup.
             </li>
             <li>
-              <b>7 / 8</b> Skip the next player / reverse direction.
+              <b>8 / King</b> 8 skips the next player, King reverses direction.
             </li>
             <li>
-              <b>Ace</b> Wild: name the next suit.
+              <b>Queen</b> Must be covered by the next card of the same play.
             </li>
             <li>
-              <b>JAKK</b> Call it on one card left, or pick up 2.
+              <b>Ace</b> Wild: name the next suit if it ends your play.
+            </li>
+            <li>
+              <b>JAKK</b> Declare it before the turn you go out on. No JAKK: your cards stay played and you pick up 1.
             </li>
           </ul>
         </div>
       </div>
+
+      <section className="lobby-opts" aria-label="Match options and house rules" data-testid="lobby-opts">
+        <h2 className="section-title">
+          Match options <span>{amHost ? 'you choose' : 'set by the host'}</span>
+        </h2>
+        <OptionsEditor houseRules={room.houseRules} options={room.options} editable={amHost && room.mode === 'friends'} onHouseRules={(hr) => setOptions(hr)} onOptions={(o) => setOptions(undefined, o)} />
+      </section>
       </div>
       <DecoChips variant="bottom" />
     </div>

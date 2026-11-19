@@ -1,7 +1,8 @@
 // Turns the server's `events` into a short, ordered presentation queue: feed line, centre-stage callout,
 // card flights and sounds. Purely cosmetic: the authoritative `view` is already rendered when this runs.
-import { type Card, type GameEvent, type PlayerView, SUIT_SYMBOL, isRedSuit } from '@shared/engine';
+import { type Card, type GameEvent, type PlayerView, type Suit, SUIT_SYMBOL } from '@shared/engine';
 import type { RoomSnapshot } from '@shared/protocol';
+import { type NameCtx, describeGroup, groupEvents } from './describe';
 import { playSfx, type Sfx } from './sound';
 import { isReduced } from './prefs';
 import { type Callout, type Flight, type Rect, getState, patch } from './store';
@@ -27,6 +28,7 @@ interface Step {
   flights: Flight[];
   sfx?: Sfx;
   landTop?: Card;
+  landSuit?: Suit;
   dur: number;
 }
 
@@ -50,14 +52,13 @@ export function cardLabel(c: Card): string {
 export function planEvents(events: GameEvent[], prev: PlayerView | null, view: PlayerView, room: RoomSnapshot | null): () => void {
   const reduced = isReduced();
   const me = view.you;
-  const nameOf = (id: string) => (id === me ? 'You' : (room?.players.find((p) => p.playerId === id)?.name ?? 'Player'));
-  const verb = (id: string, you: string, other: string) => (id === me ? you : other);
   const drawRect = rectOf('[data-anchor="draw"]');
   const discardRect = rectOf('[data-anchor="discard"]');
   const handRect = rectOf('[data-anchor="hand"]');
 
   const steps: Step[] = [];
   let pendingReshuffle = false;
+  const ctx: NameCtx = { me, nameOf: (id) => room?.players.find((p) => p.playerId === id)?.name ?? 'Player' };
 
   const flightsDraw = (pid: string, count: number): Flight[] => {
     if (!drawRect) return [];
@@ -71,47 +72,19 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
     return out;
   };
 
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i];
+  const groups = groupEvents(events);
+  for (const g of groups) {
+    const e = g.e;
+    const line = describeGroup(g, ctx);
     switch (e.type) {
       case 'reshuffled':
         pendingReshuffle = true;
         break;
       case 'played': {
         const actor = e.playerId;
-        const bits: string[] = [];
-        let callout: Step['callout'];
-        const setCallout = (c: Step['callout']) => {
-          if (!callout || callout.kind !== 'danger') callout = c;
-        };
-        let j = i + 1;
-        for (; j < events.length; j++) {
-          const n = events[j];
-          if (n.type === 'reversed') {
-            bits.push('direction reversed');
-            setCallout({ text: 'REVERSE', kind: 'info' });
-          } else if (n.type === 'skipped') {
-            const msg = `${nameOf(n.who)} skipped`;
-            if (!bits.includes(msg)) bits.push(msg);
-            setCallout({ text: 'SKIP', kind: 'info' });
-          } else if (n.type === 'suitChosen') {
-            bits.push(`suit is now ${SUIT_SYMBOL[n.suit]}`);
-            setCallout({ text: SUIT_SYMBOL[n.suit], kind: isRedSuit(n.suit) ? 'red' : 'black' });
-          } else if (n.type === 'penaltyAdded') {
-            bits.push(`+${n.total} to pick up`);
-            callout = { text: `+${n.total}`, kind: 'danger' };
-          } else if (n.type === 'penaltyCancelled') {
-            bits.push('penalty cancelled');
-            setCallout({ text: 'CANCELLED', kind: 'good' });
-          } else if (n.type === 'jakkDeclared') {
-            bits.push('JAKK!');
-            setCallout({ text: 'JAKK!', kind: 'good' });
-          } else if (n.type === 'turn' && n.playerId === actor) {
-            bits.push(actor === me ? 'you go again' : 'goes again');
-            if (!callout) setCallout({ text: 'GO AGAIN', kind: 'info' });
-          } else break;
-        }
-        i = j - 1;
+        const last = e.cards[e.cards.length - 1];
+        let landSuit: Suit = last.suit;
+        for (const x of g.extras) if (x.type === 'suitChosen') landSuit = x.suit;
         const flights: Flight[] = [];
         const to = discardRect;
         const seat = actor === me ? null : rectOf(`[data-anchor="seat-${actor}"]`);
@@ -122,34 +95,30 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
           if (from && to) flights.push({ id: idc++, card: c, from, to, delay: k * 90, dur: FLIGHT, rot: (k % 2 ? 1 : -1) * (3 + k * 2) });
         });
         steps.push({
-          text: `${nameOf(actor)} played ${e.cards.map(cardLabel).join(' ')}${bits.length ? ' - ' + bits.join(', ') : ''}`,
-          callout,
+          text: line?.text ?? '',
+          callout: line?.callout,
           flights,
           sfx: 'flick',
-          landTop: e.cards[e.cards.length - 1],
+          landTop: last,
+          landSuit,
           dur: STEP + Math.max(0, e.cards.length - 1) * 90,
         });
         break;
       }
-      case 'jakkMissed': {
-        const next = events[i + 1];
-        const count = next && next.type === 'drew' && next.reason === 'jakkMiss' ? next.count : view.rules.jakkMissPenalty;
-        if (next && next.type === 'drew' && next.reason === 'jakkMiss') i++;
-        steps.push({
-          text: `${nameOf(e.playerId)} forgot to call JAKK: +${count}`,
-          callout: { text: 'MISSED JAKK', kind: 'danger' },
-          flights: flightsDraw(e.playerId, count),
-          sfx: 'alert',
-          dur: STEP + 120,
-        });
+      case 'finishBlocked':
+        if (line) steps.push({ text: line.text, callout: line.callout, flights: flightsDraw(e.playerId, e.count), sfx: 'alert', dur: STEP + 120 });
         break;
-      }
+      case 'queenUncovered':
+        if (line && !events.some((x) => x.type === 'finishBlocked' && x.playerId === e.playerId)) {
+          steps.push({ text: line.text, callout: line.callout, flights: flightsDraw(e.playerId, e.count), sfx: 'alert', dur: STEP + 120 });
+        }
+        break;
       case 'drew': {
-        const penalty = e.reason === 'penalty';
-        const text = e.count === 1 && !penalty ? `${nameOf(e.playerId)} ${verb(e.playerId, 'draw', 'draws')} a card` : `${nameOf(e.playerId)} ${verb(e.playerId, 'pick up', 'picks up')} ${e.count}`;
+        if (e.reason === 'queenPenalty' || e.reason === 'finishPenalty') break; // shown with its own step
+        if (!line) break;
         steps.push({
-          text: (pendingReshuffle ? 'Pile reshuffled - ' : '') + text,
-          callout: penalty && e.count > 1 ? { text: `+${e.count}`, kind: 'danger' } : undefined,
+          text: (pendingReshuffle ? 'Pile reshuffled - ' : '') + line.text,
+          callout: line.callout,
           flights: flightsDraw(e.playerId, e.count),
           sfx: 'draw',
           dur: STEP,
@@ -158,16 +127,31 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
         break;
       }
       case 'jakkDeclared':
-        steps.push({ text: `${nameOf(e.playerId)} called JAKK!`, callout: { text: 'JAKK!', kind: 'good' }, flights: [], sfx: 'pop', dur: 260 });
+        if (line) steps.push({ text: line.text, callout: line.callout, flights: [], sfx: 'pop', dur: 260 });
+        break;
+      case 'jakkExpired':
+        if (line) steps.push({ text: line.text, flights: [], dur: 220 });
+        break;
+      case 'provisionalFinish':
+      case 'broughtBack':
+      case 'satOut':
+      case 'timedOut':
+        if (line) steps.push({ text: line.text, callout: line.callout, flights: [], sfx: e.type === 'provisionalFinish' ? 'pop' : 'alert', dur: STEP + 160 });
+        break;
+      case 'skipped':
+      case 'reversed':
+      case 'suitChosen':
+        if (line) steps.push({ text: line.text, callout: line.callout, flights: [], dur: 260 });
         break;
       case 'won':
-        steps.push({ text: `${nameOf(e.playerId)} ${verb(e.playerId, 'win', 'wins')}!`, flights: [], dur: 200 });
+      case 'handEnded':
+        if (line) steps.push({ text: line.text, callout: e.type === 'won' ? line.callout : undefined, flights: [], dur: 240 });
         break;
       default:
         break; // turn, penaltyTaken (folded into drew), leftovers
     }
   }
-  if (pendingReshuffle && steps.length === 0) steps.push({ text: 'Discard pile reshuffled', flights: [], dur: 200 });
+  if (pendingReshuffle && steps.length === 0) steps.push({ text: 'The discard pile was shuffled into the deck', flights: [], dur: 200 });
 
   // Cards I drew arrive in my hand just after their flight lands.
   const freshDelay: Record<string, number> = {};
@@ -177,14 +161,14 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
       if (e.type === 'drew' && e.playerId === me && e.cards) {
         for (const c of e.cards) freshDelay[c.id] = t + FLIGHT - 60;
       }
-      if (e.type === 'played' || e.type === 'drew' || e.type === 'jakkMissed') t += STEP;
+      if (e.type === 'played' || e.type === 'drew' || e.type === 'finishBlocked') t += STEP;
     }
   }
 
   return () => {
     cancelFx();
     const hasPlay = steps.some((s) => s.landTop);
-    if (hasPlay && prev && !reduced) patch({ topOverride: prev.topDiscard });
+    if (hasPlay && prev && !reduced) patch({ topOverride: prev.topDiscard, suitOverride: prev.activeSuit });
     if (Object.keys(freshDelay).length) {
       patch({ freshDelay });
       later(2200, () => patch({ freshDelay: {} }));
@@ -206,11 +190,12 @@ export function planEvents(events: GameEvent[], prev: PlayerView | null, view: P
         }
         if (s.landTop && !reduced) {
           const card = s.landTop;
-          later(FLIGHT, () => patch({ topOverride: card }));
+          const suit = s.landSuit ?? card.suit;
+          later(FLIGHT, () => patch({ topOverride: card, suitOverride: suit }));
         }
       });
       t += s.dur;
-      if (idx === steps.length - 1) later(t - 30, () => patch({ topOverride: null }));
+      if (idx === steps.length - 1) later(t - 30, () => patch({ topOverride: null, suitOverride: null }));
     });
   };
 }
