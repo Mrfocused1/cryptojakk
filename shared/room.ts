@@ -375,7 +375,7 @@ export class Room {
 
   private nextBotProfile(): Profile {
     const used = new Set(this.seats.map((s) => s.name));
-    const name = BOT_NAMES.find((n) => !used.has(n)) ?? `Bot ${this.seats.length}`;
+    const name = BOT_NAMES.find((n) => !used.has(n)) ?? `CPU ${this.seats.length}`;
     const idx = secureInt(0, 0xffffff).toString(36);
     return {
       playerId: `bot_${idx}${this.seats.length}`,
@@ -398,7 +398,7 @@ export class Room {
     if (this.hostId !== playerId) return { code: 'NOT_HOST', message: 'Only the host can do that' };
     if (this.phase !== 'lobby' && this.phase !== 'rematch') return { code: 'WRONG_PHASE', message: 'Not in the lobby' };
     const i = this.seats.findIndex((s) => s.playerId === botId && s.isBot);
-    if (i < 0) return { code: 'NOT_A_BOT', message: 'No such bot' };
+    if (i < 0) return { code: 'NOT_A_BOT', message: 'No such CPU player' };
     this.seats.splice(i, 1);
     this.touch();
     this.broadcastRoom();

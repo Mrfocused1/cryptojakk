@@ -5,7 +5,7 @@ import { Icon } from './components';
 import { type NameCtx, describeEvents } from './describe';
 import { refreshHistory, useApp, watchHistory } from './store';
 
-const KIND_TAG: Partial<Record<HistoryEntry['kind'], string>> = { bot: 'BOT', timeout: 'TIMER' };
+const KIND_TAG: Partial<Record<HistoryEntry['kind'], string>> = { bot: 'CPU', timeout: 'TIMER' };
 
 export function HistoryPanel({ className = '' }: { className?: string }) {
   const { history, room, playerId } = useApp();

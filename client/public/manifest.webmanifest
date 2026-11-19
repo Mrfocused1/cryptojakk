@@ -1,7 +1,7 @@
 {
   "name": "Crypto Jakk",
   "short_name": "Crypto Jakk",
-  "description": "A fast card-shedding game for 2-4 players. Play a bot or friends in the browser.",
+  "description": "A fast card-shedding game for 2-4 players. Play a CPU or friends in the browser.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

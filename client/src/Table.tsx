@@ -115,7 +115,7 @@ function Seat({ player, count, active, jakk, dealing, slot, dealer, out, provisi
         <div className="seat-info">
           <span className="seat-name">{player.name}</span>
           <span className="seat-meta">
-            {player.isBot && <i className="mark">BOT</i>}
+            {player.isBot && <i className="mark">CPU</i>}
             {away && <i className="mark off">OFFLINE</i>}
             {out && <i className="mark off">SAT OUT</i>}
             {provisional && <i className="mark prov">OUT?</i>}
@@ -641,7 +641,7 @@ export function Table() {
   const drawLabel = penalty && myTurn ? `Pick up ${penalty.amount}` : 'Draw';
   const playLabel = sel.length > 0 ? `Play ${sel.length} ${sel.length === 1 ? 'card' : 'cards'}` : 'Play';
 
-  const modeLabel = room.mode === 'friends' ? `Room ${room.code}` : `vs ${others.length === 1 ? '1 bot' : `${others.length} bots`}`;
+  const modeLabel = room.mode === 'friends' ? `Room ${room.code}` : `vs ${others.length === 1 ? '1 CPU' : `${others.length} CPU`}`;
   const matchLabel = `Hand ${room.handNumber}${room.options.handsToWin > 1 ? ` · first to ${room.options.handsToWin}` : ''}`;
   const power: Array<{ id: string; title: string; text: string; full: string }> = [
     { id: '2H', title: '2', text: `+${view.rules.twoPenalty} pickup`, full: `Next player picks up ${view.rules.twoPenalty}, or answers with another 2 to pass the total on.` },
@@ -949,7 +949,7 @@ export function Table() {
       </Sheet>
 
       <Sheet open={confirmLeave} onClose={() => setConfirmLeave(false)} title="Leave this game?">
-        <p className="sheet-text">{room.mode === 'friends' ? 'A bot will take your seat and play on without you.' : 'The game will end.'}</p>
+        <p className="sheet-text">{room.mode === 'friends' ? 'A CPU player will take your seat and play on without you.' : 'The game will end.'}</p>
         <div className="menu-list">
           <button className="pill secondary wide" onClick={() => setConfirmLeave(false)}>
             Keep playing

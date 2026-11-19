@@ -1,7 +1,7 @@
 # Crypto Jakk
 
 Browser card game (phone, tablet and desktop): UK-style Blackjack (the card-**shedding** game, like Crazy Eights / Switch).
-The repo contains a pure rules engine, the shared protocol/types, a bot AI, a Node WebSocket server and the React client
+The repo contains a pure rules engine, the shared protocol/types, CPU opponent logic (`shared/ai.ts`), a Node WebSocket server and the React client
 (`client/`, responsive phone / tablet / desktop, see "Client" below).
 
 * Rules (the owner's 2026-11-18 rulebook as implemented: 2-6 players, sequences, 8 skips / King reverses / 7 ordinary, Queen cover, JAKK declared before the finishing turn, host house rules, matches, turn timer; all toggles in `RulesConfig`): [`docs/RULEBOOK.md`](docs/RULEBOOK.md). Source text: [`docs/source/owner-rules-2026-11-18.md`](docs/source/owner-rules-2026-11-18.md)
@@ -39,12 +39,12 @@ shared/engine/   pure deterministic rules engine (no Node/DOM imports; rng injec
 shared/protocol.ts   every client<->server message, room/lobby types, error codes, name/room-code helpers
 shared/ai.ts         bot chooser; takes ONLY a PlayerView
 shared/room.ts       Room: lobby, game flow, bots, timers (Node-free; used by the server hub AND by the browser for solo games)
-shared/local.ts      LocalGame: in-browser stand-in for the server (same messages in/out), used for Play Now / Play AI
+shared/local.ts      LocalGame: in-browser stand-in for the server (same messages in/out), used for Play Now / Play CPU
 shared/rng.ts, timing.ts   crypto.getRandomValues shuffle rng, bot/room timings
 server/              app.ts (express + ws upgrade) hub.ts (connections, rate limit, routing) room.ts (lobby, game, bots, timers)
                      validate.ts (input validation) rng.ts (crypto.randomInt) config.ts (timings) main.ts (entry)
 client/              Vite + React + TS app (root of the Vite build), see "Client" below
-tests/               rulebook examples, simulation, redaction, AI, server integration
+tests/               rulebook examples, simulation, redaction, CPU logic, server integration
 docs/                RULEBOOK.md, PROTOCOL.md
 ```
 
@@ -86,14 +86,14 @@ client/src/{Lobby,Results,Screens,HowToPlay,components}.tsx, sound.ts (WebAudio,
   then from the URL, so reloads and rematches never pass through the home screen. `/r/CODE` opens the join flow directly.
 * **Identity**: display name + avatar + a random secret session token live in `localStorage` (`cj.identity`, `cj.token`). "Play Now"
   uses the saved identity or generates a "Guest 1234" one. Sound mute is `cj.muted`.
-* **Solo games run in the browser.** "Play Now" and "Play AI" create a `LocalGame` (`shared/local.ts`) that accepts the same client
+* **Solo games run in the browser.** "Play Now" and "Play CPU" create a `LocalGame` (`shared/local.ts`) that accepts the same client
   messages and emits the same `roomState` / `state` (redacted view + events) / `error` messages as the server, driving the same `Room`,
-  engine and bot AI (bot pacing 900-1600 ms, ~90% bot JAKK rate; shuffle uses
+  engine and CPU logic (CPU pacing 900-1600 ms, ~90% bot JAKK rate; shuffle uses
   `crypto.getRandomValues`). No WebSocket is opened, so solo works offline and on static hosting. The in-progress game is saved in
   `localStorage` (`cj.local`, expires after 12 h) so a reload returns to the table; leaving clears it. Saves are versioned (`RoomSave.v`, currently 2): a save made by an older version of the game (other rules / shape) or an unreadable one is discarded cleanly on load (`isCompatibleSave`), never half-restored.
 * **Multiplayer connects lazily.** The socket opens only for Play Friends, a `/r/CODE` link, or a stored friends-room session
   (`cj.friendsRoom`). If the very first connection fails or takes > 7 s, the friends screens show "Multiplayer is offline right now"
-  with Retry and "Play vs AI instead" instead of a reconnect loop. Endpoint: `VITE_WS_URL` or same-origin `/ws`.
+  with Retry and "Play vs CPU instead" instead of a reconnect loop. Endpoint: `VITE_WS_URL` or same-origin `/ws`.
 * **Connection** (friends): auto-reconnect with 0.5 s .. 5 s backoff, `hello` with the stored token, state replaced from `roomState`/`state`;
   banner for connecting / reconnecting / offline / "opened in another tab" (close code 4000, with a "Use here" button).
 * **Animation**: CSS + Web Animations API only. Played/drawn cards fly between hand/seats and piles (< 350 ms each, queued in event
@@ -142,7 +142,7 @@ Shortcuts never fire while typing in an input. Key hints appear on the buttons a
 
 **(a) Vercel (client only, solo works out of the box).** `vercel.json` builds with `npm run build:client`, serves `dist/client`, rewrites
 non-file routes to `index.html` (so `/r/CODE` works) and caches `/assets/*` forever. Import the repo, no settings needed. Play Now and
-Play AI run entirely in the browser; Play Friends shows "Multiplayer is offline right now" until a server is configured.
+Play CPU run entirely in the browser; Play Friends shows "Multiplayer is offline right now" until a server is configured.
 
 **(b) Add multiplayer.** Vercel cannot hold WebSockets, so run the Node server on a host that keeps a process alive (Render, Railway or
 Fly.io, for example). Run exactly **one instance** (rooms live in memory): `npm ci && npm run build && npm start` (it reads `$PORT`).

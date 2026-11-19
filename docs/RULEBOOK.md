@@ -130,7 +130,7 @@ Room option `handsToWin` = 1 (default), 3 or 5. Hand wins are tracked per player
 
 ## House rules (R122-R128)
 
-Set by the host in the lobby / rematch lobby only (never mid-hand or mid-match; the server validates and enforces them; they are part of the room state so everyone sees them before the match; guests must re-ready after a change). The AI obeys all of them.
+Set by the host in the lobby / rematch lobby only (never mid-hand or mid-match; the server validates and enforces them; they are part of the room state so everyone sees them before the match; guests must re-ready after a change). The CPU players obey all of them.
 
 | House rule | Default | Meaning |
 |---|---|---|
@@ -163,7 +163,7 @@ Invalid moves change nothing and are rejected with a short reason (R139-R140): o
 
 The room keeps an ordered, public log of the current hand (deal, every applied action with its events, timeouts, bot moves) retrievable with `requestHistory`; hidden cards are never included.
 
-## AI (R171-R180)
+## CPU opponents (R171-R180)
 
 Bots see only their own view; legal moves only; they defend pickups (red Jack first), build same-rank groups and runs, use 8 / King against a nearly-out neighbour, avoid leaving a Queen uncovered, avoid emptying the hand without a live JAKK, declare JAKK (~90% of the time, when their remaining cards could plausibly finish next turn), name the best suit for an Ace, and obey every house rule. Moves are paced 900-1600 ms.
 

@@ -49,7 +49,7 @@ export function HowToPlayContent() {
         <section className="how-goal">
           <h3 className="how-h">The goal</h3>
           <p>
-            Everyone starts with {R.handSize} cards. Be the <b>first to get rid of all of yours</b>, legally. 2 to 6 players, or 1 to 5 bots.
+            Everyone starts with {R.handSize} cards. Be the <b>first to get rid of all of yours</b>, legally. 2 to 6 players, or 1 to 5 CPU players.
           </p>
         </section>
         <section className="how-turn">

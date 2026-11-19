@@ -91,7 +91,7 @@ function PlayerRow({ p, me, isHost, canRemove }: { p: LobbyPlayer; me: boolean; 
       </span>
       <span className="pr-badges">
         {p.isHost && <b className="badge host">HOST</b>}
-        {p.isBot && <b className="badge">BOT</b>}
+        {p.isBot && <b className="badge">CPU</b>}
         {!p.connected && !p.isBot && <b className="badge off">OFFLINE</b>}
         {p.waiting && <b className="badge watch">WATCHING</b>}
         {!p.isHost && !p.waiting && (p.ready ? <b className="badge ready">READY</b> : <b className="badge wait">NOT READY</b>)}
@@ -157,7 +157,7 @@ export function Lobby() {
             {amHost ? (
               <>
                 <button className="pill secondary wide" onClick={addBot} disabled={room.players.length >= room.maxPlayers} data-testid="add-bot">
-                  <Icon name="plus" /> Add bot
+                  <Icon name="plus" /> Add CPU
                 </button>
                 <button className="pill primary wide" onClick={startGame} disabled={!room.canStart} data-testid="start-game">
                   {room.phase === 'rematch' ? 'Start rematch' : 'Start game'}
