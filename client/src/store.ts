@@ -85,6 +85,8 @@ export interface AppState {
   history: HistoryEntry[] | null;
   /** The server refused our protocol version: the page is out of date. */
   unsupported: boolean;
+  /** A saved friends room is being resumed and its state has not arrived yet. */
+  resuming: boolean;
 }
 
 let state: AppState = {
@@ -109,6 +111,7 @@ let state: AppState = {
   timer: null,
   history: null,
   unsupported: false,
+  resuming: false,
 };
 
 const listeners = new Set<() => void>();
@@ -164,8 +167,17 @@ let everWelcomed = false;
 const readyQueue: Array<() => void> = [];
 let reqCounter = 0;
 
-/** How long the very first connection may take before multiplayer is declared unavailable. */
-const FIRST_CONNECT_TIMEOUT_MS = 7000;
+/**
+ * How long the very first connection may take before multiplayer is declared unavailable. A free-tier host can need 30+ s to
+ * wake from sleep, so we keep retrying quietly (the loading screen is what the player sees) and only then give up.
+ */
+export const FIRST_CONNECT_TIMEOUT_MS = 45000;
+/** A single socket attempt is abandoned after this long and a fresh one is opened (a sleeping proxy may never answer). */
+const ATTEMPT_TIMEOUT_MS = 10000;
+/** Pause before retrying an attempt that failed fast (connection refused / 502 while the server boots). */
+const RETRY_GAP_MS = 2000;
+/** When the current run of first-connection attempts began (null = no run in progress). */
+let firstRunStart: number | null = null;
 const FRIENDS_ROOM_KEY = 'cj.friendsRoom';
 const LOCAL_SAVE_KEY = 'cj.local';
 const LOCAL_SAVE_MAX_AGE_MS = 12 * 3600 * 1000;
@@ -208,26 +220,28 @@ export function connect(): void {
   clearTimeout(reconnectTimer);
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   patch({ conn: everWelcomed ? 'reconnecting' : 'connecting' });
+  if (!everWelcomed && firstRunStart === null) firstRunStart = Date.now();
   let sock: WebSocket;
   try {
     sock = new WebSocket(wsUrl());
   } catch {
     if (everWelcomed) scheduleReconnect();
-    else markUnavailable();
+    else failFirstAttempt();
     return;
   }
   ws = sock;
   let opened = false;
   clearTimeout(openTimer);
   if (!everWelcomed) {
+    const left = FIRST_CONNECT_TIMEOUT_MS - (Date.now() - (firstRunStart as number));
     openTimer = setTimeout(() => {
       if (ws === sock && !opened) {
         ws = null;
         sock.onclose = null;
         sock.close();
-        markUnavailable();
+        failFirstAttempt();
       }
-    }, FIRST_CONNECT_TIMEOUT_MS);
+    }, Math.max(0, Math.min(ATTEMPT_TIMEOUT_MS, left)));
   }
   sock.onopen = () => {
     opened = true;
@@ -250,7 +264,7 @@ export function connect(): void {
     welcomed = false;
     clearTimeout(openTimer);
     if (!opened && !everWelcomed) {
-      markUnavailable();
+      failFirstAttempt();
       return;
     }
     if (ev.code === 4000) {
@@ -265,12 +279,24 @@ export function connect(): void {
   };
 }
 
+/** A first-connection attempt failed: retry quietly until the overall patience runs out, then declare it unavailable. */
+function failFirstAttempt(): void {
+  const spent = firstRunStart === null ? FIRST_CONNECT_TIMEOUT_MS : Date.now() - firstRunStart;
+  if (!wantConnect || spent + RETRY_GAP_MS >= FIRST_CONNECT_TIMEOUT_MS) {
+    markUnavailable();
+    return;
+  }
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connect, RETRY_GAP_MS);
+}
+
 /** Never reached the server: stop retrying and let the friends screens explain it. */
 function markUnavailable(): void {
+  firstRunStart = null;
   wantConnect = false;
   clearTimeout(reconnectTimer);
   readyQueue.length = 0;
-  patch({ conn: 'unavailable', joining: false });
+  patch({ conn: 'unavailable', joining: false, resuming: false });
 }
 
 /** Called by the friends screens: open the socket if it is not open. */
@@ -283,6 +309,7 @@ export function ensureMultiplayer(): void {
 export function retryMultiplayer(): void {
   attempt = 0;
   everWelcomed = false;
+  firstRunStart = null;
   connect();
 }
 
@@ -323,7 +350,13 @@ function disconnect(): void {
     sock.onclose = null;
     sock.close();
   }
-  patch({ conn: 'idle' });
+  firstRunStart = null;
+  patch({ conn: 'idle', resuming: false });
+}
+
+/** The player gave up waiting ("Play vs CPU instead"): stop everything multiplayer. */
+export function cancelConnect(): void {
+  if (!local) disconnect();
 }
 
 if (typeof window !== 'undefined') {
@@ -365,9 +398,10 @@ function handle(msg: ServerMessage): void {
       welcomed = true;
       everWelcomed = true;
       attempt = 0;
+      firstRunStart = null;
       clockOffset = null;
       const hadRoom = state.room !== null;
-      patch({ conn: 'open', playerId: msg.playerId });
+      patch({ conn: 'open', playerId: msg.playerId, ...(msg.resumed ? {} : { resuming: false }) });
       if (msg.resumed) {
         readyQueue.length = 0;
         const wantCode = /^\/r\/([^/]+)/i.exec(location.pathname)?.[1];
@@ -387,7 +421,7 @@ function handle(msg: ServerMessage): void {
     case 'roomState': {
       const room = msg.room;
       const was = state.room;
-      patch({ room, joining: false, joinError: null });
+      patch({ room, joining: false, joinError: null, resuming: false });
       if (room.mode === 'friends') writeStore(FRIENDS_ROOM_KEY, room.code);
       if (room.phase === 'lobby' || room.phase === 'rematch') {
         clearGame();
@@ -650,7 +684,10 @@ export function boot(): void {
     }
   }
   // Multiplayer only when a friends flow is on screen or a friends room is waiting to be resumed.
-  if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) connect();
+  if (onMultiplayerRoute() || readStore(FRIENDS_ROOM_KEY)) {
+    if (readStore(FRIENDS_ROOM_KEY)) patch({ resuming: true });
+    connect();
+  }
 }
 
 export type { Avatar };
