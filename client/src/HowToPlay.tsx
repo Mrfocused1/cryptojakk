@@ -80,10 +80,10 @@ export function HowToPlayContent() {
           <h3 className="how-h">Power cards</h3>
           <ul className="how-list">
             <Row cards={['2H', '2S']} title={`2: pick up ${R.twoPenalty}`}>
-              The next player picks up {R.twoPenalty}, or answers with another 2 to pass the total on (+2, +4, +6...). A 2 only answers a 2.
+              The next player picks up {R.twoPenalty}, or answers with another 2 or a black Jack to pass the total on (a 2 on a black Jack makes 7). A red Jack cancels the lot.
             </Row>
             <Row cards={['JS', 'JC']} title={`Black Jack: pick up ${R.blackJackPenalty}`}>
-              Jack of spades or clubs. The next player picks up {R.blackJackPenalty}, or answers with another black Jack, or a red Jack.
+              Jack of spades or clubs. The next player picks up {R.blackJackPenalty}, or answers with another black Jack or a 2 to pass the total on, or a red Jack to cancel the whole run.
             </Row>
             <Row cards={['JH', 'JD']} title="Red Jack: block">
               Cancels any pickup you are facing, from 2s or black Jacks. With no pickup it is an ordinary card.
@@ -131,7 +131,7 @@ export function HowToPlayContent() {
           </p>
           <ul className="how-bullets">
             <li><b>Flexible Queen cover</b> (default on): any card covers a Queen. Off: same suit or another Queen.</li>
-            <li><b>Mixed stacking</b> (off): 2s and black Jacks stack on each other. (A red Jack cancels any pickup either way.)</li>
+            <li><b>Mixed stacking</b> (on): 2s and black Jacks stack on each other. Off means a 2 only answers a 2 and a black Jack only answers a Jack. A red Jack cancels any pickup either way.</li>
             <li><b>Bring Backs</b> (off): go out leaving a pickup and you are only provisionally out. If the pickup travels back to you, you take it and play on.</li>
             <li><b>Finish on power cards</b> (default on): off means you can't win with an Ace, 2, 8, Jack or King.</li>
             <li><b>First Card Active</b> (off): the opening card's power applies to the first player. Otherwise it is neutral.</li>

@@ -62,8 +62,8 @@ The next player must answer with an eligible defence sequence or **take the pena
 
 | House rule `mixedStacking` | Penalty is a 2-pickup | Penalty is a Jack pickup |
 |---|---|---|
-| **OFF (default)** | 2s stack; a red Jack cancels it; black Jacks do **not** stack | black Jacks stack, red Jacks cancel; 2s do **not** stack |
-| ON | 2s and black Jacks stack on each other (cause becomes `mixed`); a red Jack cancels | same |
+| OFF | 2s stack; a red Jack cancels it; black Jacks do **not** stack | black Jacks stack, red Jacks cancel; 2s do **not** stack |
+| **ON (default since 2026-11-19)** | 2s and black Jacks stack on each other (cause becomes `mixed`); a red Jack cancels | same |
 
 ### 8 skips, King reverses, 7 is ordinary (R41-R52)
 
@@ -135,7 +135,7 @@ Set by the host in the lobby / rematch lobby only (never mid-hand or mid-match; 
 | House rule | Default | Meaning |
 |---|---|---|
 | `flexibleQueenCover` | **ON** | any card covers a Queen; OFF = same suit or another Queen |
-| `mixedStacking` | OFF | 2s and black Jacks stack on each other (a red Jack cancels any penalty regardless) |
+| `mixedStacking` | ON | 2s and black Jacks stack on each other (a red Jack cancels any penalty regardless). Owner decision 2026-11-19: on by default |
 | `bringBacks` | OFF | a finisher who leaves a live pickup is only provisionally out (below) |
 | `finishOnPower` | **ON** | OFF = a play that would empty the hand ending on A, 2, 8, J or K is rejected |
 | `firstCardActive` | OFF | opening card effects apply (above) |
@@ -175,7 +175,7 @@ Bots see only their own view; legal moves only; they defend pickups (red Jack fi
 | Does King reverse? | Yes. |
 | Must Queens be covered? | Yes; flexible cover (any card) by default, strict (same suit / Queen) as a house rule. Uncovered = draw 1; never the winning card. |
 | Can a player finish on a power card? | Yes by default (`finishOnPower` ON); host can forbid A, 2, 8, J, K. In 2-player, King/8 never win. |
-| Can 2s and Black Jacks stack together? | Not by default; `mixedStacking` house rule. |
+| Can 2s and Black Jacks stack together? | Yes by default (owner, 2026-11-19): a 2 on a black Jack makes pickup 7, and a red Jack cancels the whole run. `mixedStacking` house rule can turn it off. |
 | Room capacity 2-4 or 2-6? | 2-6. |
 | House rules configurable or fixed? | Configurable by the host before a match, visible to all. |
 | Runs and same-rank combinations exactly as proposed? | Yes: same rank, or same suit +/-1, Ace low only (no K-A wrap) - flagged for confirmation. |

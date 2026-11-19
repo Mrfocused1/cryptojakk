@@ -42,7 +42,7 @@ describe('house rules and match options', () => {
     expect(room.setOptions('P', { houseRules: { bringBacks: true } })).toMatchObject({ code: 'NOT_HOST' });
     expect(room.setOptions('H', { houseRules: { bringBacks: true, flexibleQueenCover: false }, options: { handsToWin: 3, turnSeconds: 30 } })).toBeNull();
     const snap = room.snapshot();
-    expect(snap.houseRules).toEqual({ flexibleQueenCover: false, mixedStacking: false, bringBacks: true, finishOnPower: true, firstCardActive: false });
+    expect(snap.houseRules).toEqual({ flexibleQueenCover: false, mixedStacking: true, bringBacks: true, finishOnPower: true, firstCardActive: false });
     expect(snap.options).toEqual({ handsToWin: 3, turnSeconds: 30 });
     expect(snap.rules.bringBacks).toBe(true);
     expect(sent.some((s) => s.to === 'P' && s.msg.type === 'roomState' && s.msg.room.houseRules.bringBacks)).toBe(true);

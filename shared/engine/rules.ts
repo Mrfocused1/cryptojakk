@@ -67,7 +67,7 @@ export const DEFAULT_RULES: RulesConfig = {
   finishPenalty: 1,
   jakkEnabled: true,
   flexibleQueenCover: true,
-  mixedStacking: false,
+  mixedStacking: true,
   bringBacks: false,
   finishOnPower: true,
   firstCardActive: false,

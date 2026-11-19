@@ -20,10 +20,10 @@ describe('bot chooser', () => {
     const s = scenario({ hands: { A: ['JS', 'JH', '9C', '4S'], B: ['4D', '5D', '6S'] }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 } });
     const m = bot(s) as { cardIds: string[] };
     expect(m.cardIds[m.cardIds.length - 1]).toBe('JH');
-    const only2 = scenario({ hands: { A: ['2S', '9C', '4S'], B: ['4D', '5D', '6S'] }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 } });
-    expect(bot(only2)).toMatchObject({ type: 'takePenalty' }); // 2s do not defend a Jack pickup by default
-    const mixed = scenario({ hands: { A: ['2S', '9C', '4S'], B: ['4D', '5D', '6S'] }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 }, rules: { mixedStacking: true } });
-    expect(bot(mixed)).toMatchObject({ type: 'play', cardIds: ['2S'] });
+    const only2 = scenario({ hands: { A: ['2S', '9C', '4S'], B: ['4D', '5D', '6S'] }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 }, rules: { mixedStacking: false } });
+    expect(bot(only2)).toMatchObject({ type: 'takePenalty' }); // with mixed stacking off, 2s do not defend a Jack pickup
+    const mixed = scenario({ hands: { A: ['2S', '9C', '4S'], B: ['4D', '5D', '6S'] }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 } });
+    expect(bot(mixed)).toMatchObject({ type: 'play', cardIds: ['2S'] }); // default: a 2 stacks on a black Jack
   });
 
   it('uses same-rank groups and runs to shed several cards at once, and holds Aces', () => {

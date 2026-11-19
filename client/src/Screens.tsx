@@ -544,7 +544,10 @@ export function PlayFriends() {
 // ------------------------------------------------------------------ play CPU
 
 const AI_SETUP_KEY = 'cj.aiSetup';
+/** Bumped when a default changes: v2 = mixed stacking on by default (2026-11-19). Older saves drop that one choice. */
+const AI_SETUP_VERSION = 2;
 interface AiSetup {
+  v?: number;
   n: number;
   houseRules: HouseRules;
   options: MatchOptions;
@@ -555,7 +558,10 @@ function loadAiSetup(): AiSetup {
     const o = JSON.parse(readStore(AI_SETUP_KEY) ?? 'null') as Partial<AiSetup> | null;
     if (!o) return def;
     const hr = { ...def.houseRules };
-    for (const k of Object.keys(hr) as Array<keyof HouseRules>) if (typeof o.houseRules?.[k] === 'boolean') hr[k] = o.houseRules[k] as boolean;
+    for (const k of Object.keys(hr) as Array<keyof HouseRules>) {
+      if (k === 'mixedStacking' && o.v !== AI_SETUP_VERSION) continue; // saved under the old default
+      if (typeof o.houseRules?.[k] === 'boolean') hr[k] = o.houseRules[k] as boolean;
+    }
     const hands = [1, 3, 5].includes(o.options?.handsToWin as number) ? (o.options?.handsToWin as MatchOptions['handsToWin']) : 1;
     const n = Number.isInteger(o.n) && (o.n as number) >= 1 && (o.n as number) <= MAX_BOTS_AI_MODE ? (o.n as number) : 2;
     return { n, houseRules: hr, options: { handsToWin: hands, turnSeconds: 0 } };
@@ -570,7 +576,7 @@ export function PlayAI() {
   const { n, houseRules, options } = setup;
   const update = (p: Partial<AiSetup>) =>
     setSetup((cur) => {
-      const next = { ...cur, ...p };
+      const next = { ...cur, ...p, v: AI_SETUP_VERSION };
       writeStore(AI_SETUP_KEY, JSON.stringify(next));
       return next;
     });
