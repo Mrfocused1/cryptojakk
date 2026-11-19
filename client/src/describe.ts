@@ -302,9 +302,9 @@ export const HOUSE_RULE_INFO: Array<{ key: keyof HouseRules; title: string; shor
     key: 'mixedStacking',
     title: 'Mixed 2 / Jack stacking',
     short: 'Mixed stacking',
-    on: '2s and black Jacks stack on each other; a red Jack cancels any pickup.',
+    on: '2s and black Jacks stack on each other.',
     off: '2s only answer 2s, Jacks only answer Jacks.',
-    hint: '2s and black Jacks can stack on each other; red Jack cancels any pickup.',
+    hint: '2s and black Jacks can stack on each other.',
   },
   {
     key: 'bringBacks',
@@ -344,7 +344,7 @@ export function ruleChips(hr: HouseRules, opts: MatchOptions): Array<{ label: st
   chips.push({ key: 'q', label: hr.flexibleQueenCover ? 'Queen: any cover' : 'Queen: strict cover', on: !hr.flexibleQueenCover });
   chips.push({ key: 'm', label: hr.mixedStacking ? 'Mixed stacking' : '2s / Jacks separate', on: hr.mixedStacking });
   chips.push({ key: 'b', label: hr.bringBacks ? 'Bring Backs' : 'No Bring Backs', on: hr.bringBacks });
-  chips.push({ key: 'f', label: hr.finishOnPower ? 'Finish on power' : 'No power finish', on: !hr.finishOnPower });
+  chips.push({ key: 'f', label: hr.finishOnPower ? 'Can win on power cards' : "Can't win on power cards", on: !hr.finishOnPower });
   chips.push({ key: 'c', label: hr.firstCardActive ? 'First card active' : 'Neutral opener', on: hr.firstCardActive });
   chips.push({ key: 'h', label: HANDS_LABEL[opts.handsToWin] ?? `First to ${opts.handsToWin}`, on: opts.handsToWin > 1 });
   if (opts.turnSeconds > 0) chips.push({ key: 't', label: `${opts.turnSeconds}s turns`, on: true });

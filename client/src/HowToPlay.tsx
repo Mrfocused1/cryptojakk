@@ -86,7 +86,7 @@ export function HowToPlayContent() {
               Jack of spades or clubs. The next player picks up {R.blackJackPenalty}, or answers with another black Jack, or a red Jack.
             </Row>
             <Row cards={['JH', 'JD']} title="Red Jack: block">
-              Cancels a Jack pickup you are facing. With no pickup it is an ordinary card.
+              Cancels any pickup you are facing, from 2s or black Jacks. With no pickup it is an ordinary card.
             </Row>
             <Row cards={['8D']} title="8: skip">
               The next player misses their turn. Two 8s skip two players. With two players you simply go again.
@@ -115,7 +115,7 @@ export function HowToPlayContent() {
             Declare <b>JAKK</b> <b>before the turn you go out on</b>. Tap JAKK while it is not your turn, or tick it together with your move. It covers <b>your next turn only</b>; if you don't finish on it, it expires and you can declare again.
           </p>
           <p>
-            Empty your hand <b>without</b> a live JAKK and the cards stay played, but you pick up <b>{R.finishPenalty}</b> and stay in. The same happens if your last card is a Queen, or (with two players) a King or an 8.
+            You <b>can</b> go out on a power card (a 2, 8, Jack, King or Ace) unless the house rules turn that off. Empty your hand <b>without</b> a live JAKK and the cards stay played, but you pick up <b>{R.finishPenalty}</b> and stay in. The same happens if your last card is a Queen, or (with two players) a King or an 8.
           </p>
         </section>
         <section className="how-run">
@@ -131,7 +131,7 @@ export function HowToPlayContent() {
           </p>
           <ul className="how-bullets">
             <li><b>Flexible Queen cover</b> (default on): any card covers a Queen. Off: same suit or another Queen.</li>
-            <li><b>Mixed stacking</b> (off): 2s and black Jacks stack on each other and a red Jack cancels any pickup.</li>
+            <li><b>Mixed stacking</b> (off): 2s and black Jacks stack on each other. (A red Jack cancels any pickup either way.)</li>
             <li><b>Bring Backs</b> (off): go out leaving a pickup and you are only provisionally out. If the pickup travels back to you, you take it and play on.</li>
             <li><b>Finish on power cards</b> (default on): off means you can't win with an Ace, 2, 8, Jack or King.</li>
             <li><b>First Card Active</b> (off): the opening card's power applies to the first player. Otherwise it is neutral.</li>

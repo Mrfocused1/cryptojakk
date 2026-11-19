@@ -1452,10 +1452,7 @@
   }
 }
 
-/* WILD is not printed on cards (aces are recognisable on their own); the other power tags stay */
-.card .tag[data-tag='WILD'] {
-  display: none;
-}
+/* every power card carries its tag, including WILD on Aces (tester feedback 2026-11-19); decorative fans hide tags */
 
 /* suit picker: four playing cards on the same textured stock as the deck */
 .suit-grid {

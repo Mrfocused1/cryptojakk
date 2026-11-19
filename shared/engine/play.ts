@@ -62,7 +62,7 @@ export type CheckResult =
 
 export function penaltyReason(penalty: Penalty, rules: RulesConfig): string {
   const n = penalty.amount;
-  if (penalty.kind === 'two') return rules.mixedStacking ? `Play a 2 or a Jack, or pick up ${n}` : `Play a 2 or pick up ${n}`;
+  if (penalty.kind === 'two') return rules.mixedStacking ? `Play a 2 or a Jack, or pick up ${n}` : `Play a 2 or a red Jack, or pick up ${n}`;
   if (penalty.kind === 'jack') return rules.mixedStacking ? `Play a Jack or a 2, or pick up ${n}` : `Play a Jack or pick up ${n}`;
   return `Play a 2 or a Jack, or pick up ${n}`;
 }
@@ -75,7 +75,8 @@ export function isDefenceCard(penalty: Penalty, card: Card, rules: RulesConfig):
   if (!two && !black && !red) return false;
   switch (penalty.kind) {
     case 'two':
-      return two || rules.mixedStacking;
+      // a red Jack always cancels a pickup, including one from 2s (owner decision 2026-11-19)
+      return two || red || rules.mixedStacking;
     case 'jack':
       return black || red || rules.mixedStacking;
     default:
@@ -154,7 +155,7 @@ export function tallyPenalty(rules: RulesConfig, incoming: Penalty | null, cards
       kind = kind === null || amount === 0 ? k : kind === k ? k : 'mixed';
       amount += n;
       added += n;
-    } else if (isRedJack(c) && amount > 0 && (kind === 'jack' || kind === 'mixed' || rules.mixedStacking)) {
+    } else if (isRedJack(c) && amount > 0) {
       amount = 0;
       kind = null;
       added = 0;

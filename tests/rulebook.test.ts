@@ -128,7 +128,7 @@ describe('Pickup penalties (R21-R40, R78-R88)', () => {
     expect(r.state.penalty).toEqual({ kind: 'two', amount: 2 });
     expect(turnId(r.state)).toBe('B');
     expect(r.events).toContainEqual({ type: 'penaltyAdded', playerId: 'A', kind: 'two', added: 2, total: 2 });
-    expect(act(r.state, { type: 'draw', playerId: 'B' })).toMatchObject({ ok: false, code: 'PENALTY_PENDING', reason: 'Play a 2 or pick up 2' });
+    expect(act(r.state, { type: 'draw', playerId: 'B' })).toMatchObject({ ok: false, code: 'PENALTY_PENDING', reason: 'Play a 2 or a red Jack, or pick up 2' });
   });
 
   it('Example 12: 2s stack (one at a time or together): 2+2, and [2,2,2] = 6', () => {
@@ -143,7 +143,7 @@ describe('Pickup penalties (R21-R40, R78-R88)', () => {
 
   it('Example 13: an unrelated card cannot answer a pickup; taking it draws the full total and ends the turn (R26, R84-R86)', () => {
     const s = scenario({ hands: { A: ['9C', ...FILL], B: ['4D', '5D', '6S'], C: ['4S', '5S', '6C'] }, top: '2H', turn: 'A', penalty: { kind: 'two', amount: 4 }, draw: ['KC', 'QC', 'JC', '8C'] });
-    expect(play(s, 'A', ['9C'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or pick up 4' });
+    expect(play(s, 'A', ['9C'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or a red Jack, or pick up 4' });
     const r = ok(act(s, { type: 'takePenalty', playerId: 'A' }));
     expect(r.state.hands.A).toHaveLength(8);
     expect(r.state.penalty).toBeNull();
@@ -179,10 +179,12 @@ describe('Pickup penalties (R21-R40, R78-R88)', () => {
     expect(only.state.penalty).toEqual({ kind: 'jack', amount: 10 });
   });
 
-  it('Example 17: mixed stacking OFF: a red Jack does not cancel a 2-penalty, and 2s and Jacks do not stack on each other (R33-R34, R40)', () => {
-    const two = scenario({ hands: { A: ['JH', 'JS', '2S', ...FILL], B: OPP.B, C: OPP.C }, top: '2D', turn: 'A', penalty: { kind: 'two', amount: 2 } });
-    expect(play(two, 'A', ['JH'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY' });
-    expect(play(two, 'A', ['JS'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY' });
+  it('Example 17: mixed stacking OFF: 2s and black Jacks do not stack on each other, but a red Jack still cancels a 2-penalty (R33-R34; owner decision 2026-11-19)', () => {
+    const two = scenario({ hands: { A: ['JH', 'JS', '2S', ...FILL], B: OPP.B, C: OPP.C }, top: '2D', turn: 'A', penalty: { kind: 'two', amount: 4 } });
+    const cancel = ok(play(two, 'A', ['JH']));
+    expect(cancel.state.penalty).toBeNull();
+    expect(cancel.events).toContainEqual({ type: 'penaltyCancelled', playerId: 'A', kind: 'two', amount: 4 });
+    expect(play(two, 'A', ['JS'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or a red Jack, or pick up 4' });
     const jack = scenario({ hands: { A: ['2S', 'JH', ...FILL], B: OPP.B, C: OPP.C }, top: 'JC', turn: 'A', penalty: { kind: 'jack', amount: 5 } });
     expect(play(jack, 'A', ['2S'])).toMatchObject({ ok: false, reason: 'Play a Jack or pick up 5' });
   });
@@ -212,7 +214,7 @@ describe('Pickup penalties (R21-R40, R78-R88)', () => {
 
   it('Example 20: under a pickup the WHOLE sequence may contain only defence cards', () => {
     const s = scenario({ hands: { A: ['2S', '4S', '2D', ...FILL], B: OPP.B, C: OPP.C }, top: '2H', turn: 'A', penalty: { kind: 'two', amount: 2 } });
-    expect(play(s, 'A', ['2S', '4S'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or pick up 2' });
+    expect(play(s, 'A', ['2S', '4S'])).toMatchObject({ ok: false, code: 'MUST_ANSWER_PENALTY', reason: 'Play a 2 or a red Jack, or pick up 2' });
     expect(ok(play(s, 'A', ['2S', '2D'])).state.penalty).toEqual({ kind: 'two', amount: 6 });
     const view = toPlayerView(s, 'A');
     expect(getLegalCardIds(view).sort()).toEqual(['2D', '2S']);

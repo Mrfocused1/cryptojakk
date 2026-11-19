@@ -52,7 +52,7 @@ Special effects resolve over the whole sequence in order (R71): every 8 skips on
 |---|---|
 | 2 | adds 2 (`twoPenalty`) |
 | black Jack (J♠ J♣) | adds 5 (`blackJackPenalty`) |
-| red Jack (J♥ J♦) | cancels an **eligible** pickup (sets it to 0). Creates nothing; with no pickup it is an ordinary card |
+| red Jack (J♥ J♦) | cancels **any** pickup, from 2s, black Jacks or mixed (sets it to 0). Creates nothing; with no pickup it is an ordinary card. Owner decision 2026-11-19: no longer depends on `mixedStacking` |
 
 The pickup total is **walked card by card** over the sequence, starting from the incoming penalty (R87): a 2 adds 2, a black Jack adds 5, an eligible red Jack sets it to 0,
 and **any other card played after pickup cards in the same turn clears what this turn added** (R77: 2♥ 3♥ 4♥ 5♥ leaves no pickup; 3♥ 2♥ keeps +2).
@@ -62,8 +62,8 @@ The next player must answer with an eligible defence sequence or **take the pena
 
 | House rule `mixedStacking` | Penalty is a 2-pickup | Penalty is a Jack pickup |
 |---|---|---|
-| **OFF (default)** | only 2s defend; a red Jack does **not** cancel it | black Jacks stack, red Jacks cancel; 2s do **not** stack |
-| ON | 2s, black Jacks and red Jacks all defend; a red Jack cancels any penalty; cause becomes `mixed` | same |
+| **OFF (default)** | 2s stack; a red Jack cancels it; black Jacks do **not** stack | black Jacks stack, red Jacks cancel; 2s do **not** stack |
+| ON | 2s and black Jacks stack on each other (cause becomes `mixed`); a red Jack cancels | same |
 
 ### 8 skips, King reverses, 7 is ordinary (R41-R52)
 
@@ -135,7 +135,7 @@ Set by the host in the lobby / rematch lobby only (never mid-hand or mid-match; 
 | House rule | Default | Meaning |
 |---|---|---|
 | `flexibleQueenCover` | **ON** | any card covers a Queen; OFF = same suit or another Queen |
-| `mixedStacking` | OFF | 2s and black Jacks stack on each other; a red Jack cancels any penalty |
+| `mixedStacking` | OFF | 2s and black Jacks stack on each other (a red Jack cancels any penalty regardless) |
 | `bringBacks` | OFF | a finisher who leaves a live pickup is only provisionally out (below) |
 | `finishOnPower` | **ON** | OFF = a play that would empty the hand ending on A, 2, 8, J or K is rejected |
 | `firstCardActive` | OFF | opening card effects apply (above) |
